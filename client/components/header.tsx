@@ -88,6 +88,7 @@ export function Header() {
 
         {/* Actions */}
         <div className="hidden items-center gap-3 lg:flex">
+<<<<<<< HEAD
           <button
             onClick={toggleTheme}
             type="button"
