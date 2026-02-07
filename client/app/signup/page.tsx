@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export default function SignUpPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 animate-fade-in-up">
       <div className="w-full max-w-md space-y-6 p-8 border border-border rounded-2xl bg-card/50 backdrop-blur-sm shadow-xl">
         <div className="text-center">
           <h1 className="text-3xl font-bold font-space-grotesk tracking-tight text-foreground">
