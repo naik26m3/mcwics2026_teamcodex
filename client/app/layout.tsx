@@ -12,7 +12,7 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: "Quietly - Find Friends, At Your Own Pace",
+  title: "IntroConnect - Find Friends, At Your Own Pace",
   description:
     "A safe and comfortable space for introverts to connect through AI-powered matching. Build genuine friendships without the pressure.",
 }

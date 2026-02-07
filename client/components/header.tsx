@@ -1,5 +1,5 @@
 "use client"
-
+import Link from "next/link"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "next-themes"
@@ -87,24 +87,16 @@ export function Header() {
 
         {/* Actions */}
         <div className="hidden items-center gap-3 lg:flex">
-          <button
-            onClick={toggleTheme}
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="Toggle color theme"
-          >
-            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          </button>
+          
           <a
             href="#contact"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Sign In
           </a>
-          <Button className="rounded-full px-6 font-medium" size="sm">
-            Sign Up
-          </Button>
+          <Button asChild className="rounded-full px-6 font-medium" size="sm">
+  <Link href="/signup">Sign Up</Link>
+</Button>
         </div>
 
         {/* Mobile Menu Toggle */}
@@ -158,7 +150,11 @@ export function Header() {
                 Sign In
               </a>
               <Button className="rounded-full px-6 font-medium" size="sm">
+                <Link href="/signup">
+              <button className="px-6 py-3 bg-primary text-white rounded-lg font-bold">
                 Sign Up
+              </button>
+                </Link>
               </Button>
             </div>
           </nav>
