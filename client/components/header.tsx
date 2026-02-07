@@ -88,15 +88,7 @@ export function Header() {
 
         {/* Actions */}
         <div className="hidden items-center gap-3 lg:flex">
-          <button
-            onClick={toggleTheme}
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="Toggle color theme"
-          >
-            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          </button>
+          
           <a
             href="#contact"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
