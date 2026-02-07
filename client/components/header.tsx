@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useTheme } from "next-themes"
@@ -103,7 +104,9 @@ export function Header() {
             Sign In
           </a>
           <Button className="rounded-full px-6 font-medium" size="sm">
-            Sign Up
+            <Link href="/login">
+                Sign Up
+            </Link>
           </Button>
         </div>
 
@@ -157,8 +160,10 @@ export function Header() {
               >
                 Sign In
               </a>
-              <Button className="rounded-full px-6 font-medium" size="sm">
-                Sign Up
+              <Button asChild className="rounded-full px-6 font-medium" size="sm" >
+                <Link href="/login">
+                  Sign Up
+                </Link>
               </Button>
             </div>
           </nav>
