@@ -1,12 +1,56 @@
-import React from "react";
+"use client";
+
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-// If you have a Google icon component, you can import it here
-// For now, I'll use a generic SVG
+import { useRouter } from "next/navigation";
 
 export default function SignUpPage() {
+  const router = useRouter();
+
+  // 1. THE MEMORY: Initializing the state with all fields
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    gender: "",
+    age: "",
+    email: "",
+    password: "",
+  });
+
+  // 2. THE AUTO-LOAD: When page opens, check for saved data
+  useEffect(() => {
+    const saved = localStorage.getItem("user_signup_draft");
+    if (saved) {
+      setFormData(JSON.parse(saved));
+    }
+  }, []);
+
+  // 3. THE AUTO-SAVE: Save to storage every time something is typed
+  useEffect(() => {
+    localStorage.setItem("user_signup_draft", JSON.stringify(formData));
+  }, [formData]);
+
+  // 4. THE CAPTURER: Updates the state object
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [id]: value,
+    }));
+  };
+
+  const handleSignUp = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log("Ready to send to backend:", formData);
+    
+    // Move to onboarding
+    router.push("/onboarding");
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 animate-fade-in-up">
       <div className="w-full max-w-md space-y-6 p-8 border border-border rounded-2xl bg-card/50 backdrop-blur-sm shadow-xl">
+        
         <div className="text-center">
           <h1 className="text-3xl font-bold font-space-grotesk tracking-tight text-foreground">
             Create an Account
@@ -16,7 +60,7 @@ export default function SignUpPage() {
           </p>
         </div>
 
-        {/* Google Login Button */}
+        {/* Google Login Button from Commit 1 */}
         <button 
           type="button"
           className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-secondary text-secondary-foreground border border-border rounded-lg hover:bg-secondary/80 transition-all font-medium"
@@ -42,31 +86,51 @@ export default function SignUpPage() {
           Continue with Google
         </button>
 
+        {/* Divider from Commit 1 */}
         <div className="relative">
-          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border"></span></div>
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-border"></span>
+          </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground font-space-grotesk">Or continue with email</span>
+            <span className="bg-card px-2 text-muted-foreground font-space-grotesk">
+              Or continue with email
+            </span>
           </div>
         </div>
 
-        <form className="space-y-4">
+        <form onSubmit={handleSignUp} className="space-y-4">
+          
           {/* Name Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="firstName">First Name</label>
-              <input id="firstName" type="text" placeholder="Jane" className="input-style w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:ring-2 focus:ring-primary outline-none" required />
+              <input 
+                id="firstName" type="text" placeholder="Jane" required
+                value={formData.firstName} onChange={handleChange}
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="lastName">Last Name</label>
-              <input id="lastName" type="text" placeholder="Doe" className="input-style w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:ring-2 focus:ring-primary outline-none" required />
+              <input 
+                id="lastName" type="text" placeholder="Doe" required
+                value={formData.lastName} onChange={handleChange}
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+              />
             </div>
           </div>
 
-          {/* Optional Row */}
+          {/* Gender & Age Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="gender">Gender <span className="text-xs text-muted-foreground">(Optional)</span></label>
-              <select id="gender" className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:ring-2 focus:ring-primary outline-none">
+              <label className="text-sm font-medium" htmlFor="gender">
+                Gender <span className="text-xs text-muted-foreground">(Optional)</span>
+              </label>
+              <select 
+                id="gender" 
+                value={formData.gender} onChange={handleChange}
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary appearance-none"
+              >
                 <option value="">Select...</option>
                 <option value="female">Female</option>
                 <option value="male">Male</option>
@@ -75,24 +139,40 @@ export default function SignUpPage() {
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium" htmlFor="age">Age <span className="text-xs text-muted-foreground">(Optional)</span></label>
-              <input id="age" type="number" placeholder="21" className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:ring-2 focus:ring-primary outline-none" />
+              <label className="text-sm font-medium" htmlFor="age">
+                Age <span className="text-xs text-muted-foreground">(Optional)</span>
+              </label>
+              <input 
+                id="age" type="number" placeholder="21"
+                value={formData.age} onChange={handleChange}
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+              />
             </div>
           </div>
 
+          {/* Email Field */}
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="email">Email</label>
-            <input id="email" type="email" placeholder="jane@example.com" className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:ring-2 focus:ring-primary outline-none" required />
+            <input 
+              id="email" type="email" placeholder="jane@example.com" required
+              value={formData.email} onChange={handleChange}
+              className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+            />
           </div>
 
+          {/* Password Field */}
           <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="password">Create Password</label>
-            <input id="password" type="password" placeholder="••••••••" className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border focus:ring-2 focus:ring-primary outline-none" required />
+            <label className="text-sm font-medium" htmlFor="password">Password</label>
+            <input 
+              id="password" type="password" placeholder="••••••••" required
+              value={formData.password} onChange={handleChange}
+              className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+            />
           </div>
 
           <button 
             type="submit" 
-            className="w-full py-3 px-4 mt-2 bg-primary text-primary-foreground font-bold rounded-lg hover:opacity-90 transition-all shadow-lg active:scale-[0.98]"
+            className="w-full py-3 px-4 mt-4 bg-primary text-primary-foreground font-bold rounded-lg hover:opacity-90 transition-all shadow-lg active:scale-[0.98]"
           >
             Next
           </button>
