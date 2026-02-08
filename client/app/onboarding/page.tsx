@@ -1,12 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Bot, Check, Plus, ArrowRight } from "lucide-react";
 import { BACKEND_URL } from "@/lib/api";
+
+// Fallback for Suspense (avoids prerender error from useSearchParams)
+function OnboardingFallback() {
+  return (
+    <div className="flex flex-col h-screen bg-background text-foreground items-center justify-center gap-4">
+      <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+        <Bot className="text-primary-foreground w-6 h-6 animate-pulse" />
+      </div>
+      <p className="text-sm text-muted-foreground">Loading...</p>
+    </div>
+  );
+}
 
 const INTEREST_TAGS = [
   "Reading", "Gaming", "Solo Hikes", "Lo-fi Music", "Cooking",
@@ -44,7 +56,7 @@ const DISCOVERY_QUESTION = {
   type: "text"
 };
 
-export default function ChatOnboarding() {
+function ChatOnboarding() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isDiscoveryMode = searchParams.get("mode") === "discovery";
@@ -312,5 +324,13 @@ export default function ChatOnboarding() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<OnboardingFallback />}>
+      <ChatOnboarding />
+    </Suspense>
   );
 }
