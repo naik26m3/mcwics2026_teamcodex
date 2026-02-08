@@ -38,8 +38,13 @@
 - [x] Integrate Q1-Q3 initial user data into AI context
 - [x] Final Profile Generation based on full conversation history
 
-#### **Phase 8: MongoDB Integration**
-- [ ] Setup MongoDB connection utility (`backend/database.py`)
-- [ ] Create CRUD operations for User Profile (Save/Update)
-- [ ] Create Session management logic (Save/Fetch Chat History)
+#### Phase 8: Frontend-Backend-DB Integration (Bridge)
+- [x] **[Backend] Centralize Database**: Create `core/database.py` and remove redundant Mongo connection strings from all routes.
+- [x] **[Backend] Onboarding API Router**: Create `routes/onboarding.py` as a bridge between React and AI Interviewer.
+    - [x] `POST /onboarding/start`: Save initial data & init session.
+    - [x] `POST /onboarding/chat`: Handle dynamic turns with `engine/interviewer.py`.
+    - [x] `POST /onboarding/complete`: Run `analyzer.py` and save final profile to DB.
+- [x] **[Frontend] Dynamic UI Sync**: Modify `onboarding/page.tsx` to call AI API instead of static questions.
+- [x] **[Verification]**: Full registration -> AI chat -> DB profile check.
+ management logic (Save/Fetch Chat History)
 - [ ] Connect Database to API Routers (Dependency Injection)
