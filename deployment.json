@@ -1,0 +1,115 @@
+{
+    "name": "IntroConnect Deployment Config",
+    "version": "1.0.0",
+    "description": "Unified configuration for deploying IntroConnect to Vercel (frontend) and Railway (backend)",
+    "deployment": {
+        "frontend": {
+            "platform": "Vercel",
+            "rootDirectory": "client",
+            "buildCommand": "npm run build",
+            "startCommand": "npm run start",
+            "nodeVersion": "18.x",
+            "environmentVariables": [
+                {
+                    "name": "NEXT_PUBLIC_BACKEND_URL",
+                    "description": "Backend URL (Railway public domain)",
+                    "example": "https://mcwics2026teamcodex-production.up.railway.app",
+                    "required": true,
+                    "buildTime": true,
+                    "note": "Must include https:// protocol. No trailing slash. REQUIRES FRONTEND REDEPLOY after change."
+                }
+            ]
+        },
+        "backend": {
+            "platform": "Railway",
+            "rootDirectory": "backend",
+            "startCommand": "python -m uvicorn main:app --host 0.0.0.0 --port $PORT",
+            "pythonVersion": "3.10+",
+            "environmentVariables": [
+                {
+                    "name": "MONGO_URI",
+                    "description": "MongoDB connection string (Atlas)",
+                    "example": "mongodb+srv://user:pass@cluster.mongodb.net/IntroConnect?retryWrites=true&w=majority",
+                    "required": true,
+                    "buildTime": false
+                },
+                {
+                    "name": "GEMINI_API_KEY",
+                    "description": "Google Gemini API key for AI interviewer",
+                    "example": "your-gemini-key-here",
+                    "required": true,
+                    "buildTime": false
+                },
+                {
+                    "name": "ALLOWED_ORIGINS",
+                    "description": "CORS origins (comma-separated, include https:// protocol)",
+                    "example": "https://mcwics2026-teamcodex.vercel.app,https://preview-branch-name.vercel.app",
+                    "required": true,
+                    "buildTime": false,
+                    "note": "Must list all frontend URLs (production + preview branches). No trailing slash on each URL."
+                }
+            ]
+        },
+        "connectivity": {
+            "cors": {
+                "frontend_requests_backend": true,
+                "flow": "Vercel frontend makes fetch() calls → checks CORS headers from Railway backend",
+                "requiresExactOriginMatch": true,
+                "troubleshooting": "If CORS fails: verify ALLOWED_ORIGINS in Railway matches browser's origin exactly (protocol + domain)"
+            },
+            "healthCheck": {
+                "endpoint": "/health",
+                "url_pattern": "https://[backend-railway-url]/health",
+                "expected_response": {
+                    "status": "healthy"
+                }
+            }
+        }
+    },
+    "setup": {
+        "step1_vercel_frontend": {
+            "title": "Deploy frontend to Vercel",
+            "steps": [
+                "Push code to GitHub (this repo)",
+                "Visit vercel.com → Import Project → select this GitHub repo",
+                "Set Root Directory to 'client' (critical: this is a setting in Vercel UI, not in code)",
+                "In Environment Variables, add NEXT_PUBLIC_BACKEND_URL with your Railway backend URL",
+                "Deploy"
+            ]
+        },
+        "step2_railway_backend": {
+            "title": "Deploy backend to Railway",
+            "steps": [
+                "Visit railway.app → New Project → Deploy from GitHub → select this repo",
+                "Railway auto-detects Dockerfile or will ask for Python service setup",
+                "In Variables tab, add: MONGO_URI, GEMINI_API_KEY, ALLOWED_ORIGINS (with your Vercel URL)",
+                "Railway redeploys automatically after variable changes"
+            ]
+        },
+        "step3_connect": {
+            "title": "Connect Vercel ↔ Railway",
+            "steps": [
+                "In Vercel: set NEXT_PUBLIC_BACKEND_URL = your Railway public URL (copy from Railway → Settings → Networking)",
+                "In Railway: set ALLOWED_ORIGINS = your Vercel URL (copy from Vercel dashboard)",
+                "Redeploy both (Vercel UI → Deployments → ⋯ → Redeploy; Railway auto-redeploys on variable change)",
+                "Test: open frontend in browser, check DevTools Console for fetch errors"
+            ]
+        },
+        "step4_troubleshoot": {
+            "title": "If still not communicating",
+            "steps": [
+                "Check browser DevTools → Network tab → see if requests are sent and what error is returned",
+                "Run: curl -i -H 'Origin: [vercel-url]' [railway-url]/health (should show Access-Control-Allow-Origin header)",
+                "Check Railway logs → confirm backend started and shows incoming requests",
+                "Verify no trailing slashes in env vars and protocol is https://"
+            ]
+        }
+    },
+    "notes": {
+        "vercelRootDirectory": "The 'Root Directory' setting in Vercel is NOT in code; it's in the Vercel project settings UI. Set it to 'client' when creating the project.",
+        "buildTimeVars": "NEXT_PUBLIC_* variables in Vercel are baked into the build. You must redeploy after changing them.",
+        "railways": "Railway env variables are runtime; backend picks them up on container start. No redeploy code needed; Railway redeploys the container automatically.",
+        "cors": "CORS origins must include protocol (https://) and hostname. No trailing slash. Backend checks this against the browser's 'Origin' header.",
+        "trailingSlashes": "URLs in env vars should NOT have trailing slashes. Bad: 'https://example.com/'; Good: 'https://example.com'."
+    }
+}
