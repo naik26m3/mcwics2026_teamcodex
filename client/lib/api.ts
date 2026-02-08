@@ -23,8 +23,15 @@
 // Get backend URL from environment variable or use localhost as fallback.
 // On Vercel: set NEXT_PUBLIC_BACKEND_URL to your Railway URL (see CONNECT_VERCEL_RAILWAY.md).
 const getBackendUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-  if (envUrl) return envUrl.replace(/\/$/, ""); // no trailing slash
+  let envUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
+  envUrl = envUrl.replace(/\/$/, ""); // strip trailing slash if present
+  if (envUrl) {
+    // If user set hostname without protocol (common mistake in Vercel), assume https
+    if (!/^https?:\/\//i.test(envUrl)) {
+      envUrl = `https://${envUrl}`;
+    }
+    return envUrl;
+  }
   return typeof window !== "undefined" ? "http://localhost:8000" : "http://localhost:8000";
 };
 
