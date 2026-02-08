@@ -34,18 +34,30 @@ async def start_onboarding(db_id: str, data: dict = Body(...)):
         raise HTTPException(status_code=500, detail=f"Failed to start onboarding: {str(e)}")
 
 @router.post("/chat/{db_id}")
-async def fetch_next_ai_question(db_id: str, user_answer: str = Body(embed=True)):
+async def fetch_next_ai_question(db_id: str, user_answer: str = Body(None, embed=True)):
     """
     Receives user answer, updates history in DB, and gets next question from Gemini AI.
+    Merges signup profile data with initial onboarding data for better context.
     """
     try:
-        # 1. Fetch current session
+        # 1. Fetch current session and user profile
         session = conversations_collection.find_one({"user_id": db_id})
-        if not session:
-            raise HTTPException(status_code=404, detail="Onboarding session not found")
+        user = users_collection.find_one({"_id": ObjectId(db_id)})
+        
+        if not session or not user:
+            raise HTTPException(status_code=404, detail="Session or User not found")
         
         history = session.get("history", [])
+        
+        # Merge Signup Data + Onboarding Answers
         initial_data = session.get("initial_data", {})
+        initial_data.update({
+            "firstName": user.get("firstName"),
+            "lastName": user.get("lastName"),
+            "gender": user.get("gender"),
+            "age": user.get("age"),
+            "email": user.get("email")
+        })
         
         # 2. Append user's last answer to history (if provided)
         if user_answer and user_answer.strip():
