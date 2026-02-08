@@ -25,11 +25,19 @@ export default function LoginPage() {
       // Calling your FastAPI backend /auth prefix
       const response = await fetch(`${BACKEND_URL}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password: password
+        }),
       });
 
+      console.log("Response received. Status:", response.status);
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (response.ok) {
         /* --- SUCCESS: MATCH FOUND IN DATABASE --- */
