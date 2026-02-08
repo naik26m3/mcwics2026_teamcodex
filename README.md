@@ -82,6 +82,11 @@ Run the server:
 python -m uvicorn main:app --port 8000 --reload
 ```
 
+### Deployment notes
+
+- On Railway set environment variables `MONGO_URI` and `GEMINI_API_KEY` (see RAILWAY_DEPLOY.md).
+- If your frontend is deployed on Vercel, set `ALLOWED_ORIGINS` on Railway to your Vercel URL and set `NEXT_PUBLIC_BACKEND_URL` in Vercel to your Railway URL. See CONNECT_VERCEL_RAILWAY.md for details.
+
 ### 2. Frontend Setup
 ```bash
 cd client
