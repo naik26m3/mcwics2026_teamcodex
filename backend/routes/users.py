@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException
 from core.database import users_collection
+from core.security import get_password_hash
 from bson import ObjectId
 from routes.chat import manager as ws_manager
 
@@ -11,6 +12,17 @@ async def signup(user_data: dict = Body(...)):
         if users_collection.find_one({"email": user_data["email"]}):
             raise HTTPException(status_code=400, detail="Email already registered")
         
+        # Hash the password before saving
+        if "password" in user_data:
+            print(f"DEBUG: Hashing password for {user_data.get('email')}. Length: {len(str(pw))}")
+            try:
+                hashed_pw = get_password_hash(pw)
+                print(f"DEBUG: Password hashed successfully. Hash length: {len(hashed_pw)}")
+                user_data["password"] = hashed_pw
+            except Exception as e:
+                print(f"DEBUG: Hashing failed: {e}")
+                raise e
+            
         result = users_collection.insert_one(user_data)
         return {
             "status": "success", 
