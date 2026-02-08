@@ -8,7 +8,10 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 
 if not MONGO_URI:
-    raise ValueError("MONGO_URI not found in environment variables")
+    raise ValueError(
+        "MONGO_URI not found in environment variables. "
+        "On Railway: set MONGO_URI in your service Variables (see RAILWAY_DEPLOY.md)."
+    )
 
 client = MongoClient(MONGO_URI, tlsAllowInvalidCertificates=True)
 db = client["IntroConnect"]

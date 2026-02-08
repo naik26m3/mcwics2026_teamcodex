@@ -71,8 +71,10 @@ pip install -r requirements.txt
 Create a `.env` file in the `backend/` directory:
 ```env
 MONGO_URI=your_mongodb_atlas_uri
-OPENAI_API_KEY=your_key_here
+GEMINI_API_KEY=your_gemini_key_here
 ```
+
+**Deploying to Railway?** Set these in the Railway dashboard (Variables), not in a file. See **[RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md)**.
 Run the server:
 ```bash
 python -m uvicorn main:app --port 8000 --reload

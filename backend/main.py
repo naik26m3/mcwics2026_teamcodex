@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import matching, auth, users, chat, onboarding
@@ -5,14 +6,18 @@ from core.database import users_collection
 
 app = FastAPI(title="IntroConnect API")
 
-# 1. CORS Configuration (include 127.0.0.1 and network IP for dev)
+# CORS: local dev + optional ALLOWED_ORIGINS env (e.g. your Vercel URL on Railway)
+_default_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://172.21.80.1:3000",
+]
+_extra = os.getenv("ALLOWED_ORIGINS", "")
+_cors_origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://172.21.80.1:3000",
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
