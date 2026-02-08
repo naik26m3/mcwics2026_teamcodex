@@ -119,11 +119,7 @@ export default function HomePage() {
   };
 
   const handleAddFriend = async (friend: any) => {
-    console.log("➕ [ACTION] Adding friend to circle:", friend);
-    if (!user?.id) {
-      console.error("❌ [ERROR] No user ID found for adding friend");
-      return;
-    }
+    if (!user?.id) return;
 
     try {
       const response = await fetch(`http://localhost:8000/users/${user.id}/add-friend`, {
@@ -134,7 +130,6 @@ export default function HomePage() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("✅ [SUCCESS] Friend added in backend", data);
 
         // Use the REVEALED friend object from backend if available
         const revealedFriend = data.friend || friend;
@@ -148,12 +143,9 @@ export default function HomePage() {
         const updatedUser = { ...user, inner_circle: updatedInnerCircle };
         setUser(updatedUser);
         localStorage.setItem("user_session", JSON.stringify(updatedUser));
-      } else {
-        const errorData = await response.json();
-        console.error("❌ [ERROR] Failed to add friend in backend:", errorData);
       }
     } catch (error) {
-      console.error("❌ [ERROR] Connection error during handleAddFriend:", error);
+      console.error("Failed to add friend:", error);
     }
   };
 
