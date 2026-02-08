@@ -42,7 +42,7 @@ export default function HomePage() {
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
-      
+
       // Load actual friends from user data
       if (parsedUser.inner_circle) {
         setInnerCircle(parsedUser.inner_circle);
@@ -119,6 +119,12 @@ export default function HomePage() {
   };
 
   const handleAddFriend = async (friend: any) => {
+    console.log("➕ [ACTION] Adding friend to circle:", friend);
+    if (!user?.id) {
+      console.error("❌ [ERROR] No user ID found for adding friend");
+      return;
+    }
+
     try {
       const response = await fetch(`http://localhost:8000/users/${user.id}/add-friend`, {
         method: 'POST',
@@ -127,16 +133,49 @@ export default function HomePage() {
       });
 
       if (response.ok) {
-        setInnerCircle((prev) => [...prev, friend]);
+        const data = await response.json();
+        console.log("✅ [SUCCESS] Friend added in backend", data);
+
+        // Use the REVEALED friend object from backend if available
+        const revealedFriend = data.friend || friend;
+
+        const updatedInnerCircle = [...innerCircle, revealedFriend];
+        setInnerCircle(updatedInnerCircle);
         setTempFriends((prev) => prev.filter(f => f.id !== friend.id));
-        setSelectedFriend(null);
+        setSelectedFriend(revealedFriend);
+
+        // Update local session
+        const updatedUser = { ...user, inner_circle: updatedInnerCircle };
+        setUser(updatedUser);
+        localStorage.setItem("user_session", JSON.stringify(updatedUser));
+      } else {
+        const errorData = await response.json();
+        console.error("❌ [ERROR] Failed to add friend in backend:", errorData);
       }
     } catch (error) {
-      console.error("Failed to add friend:", error);
+      console.error("❌ [ERROR] Connection error during handleAddFriend:", error);
     }
   };
 
-  const getInitials = (name: string) => name ? name.split(" ").map(n => n[0]).join("").toUpperCase() : "??";
+  const getDisplayName = (f: any) => {
+    if (!f) return "Kindred Spirit";
+    if (f.alias) return f.alias;
+    if (f.name) return f.name;
+    if (f.firstName || f.lastName) {
+      return `${f.firstName || ""} ${f.lastName || ""}`.trim();
+    }
+    return "Kindred Spirit";
+  };
+
+  const getInitials = (name: string) => {
+    if (!name || name === "??") return "??";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   if (!user) return <div className="min-h-screen bg-background flex items-center justify-center font-bold tracking-tighter">INITIALIZING...</div>;
 
@@ -193,10 +232,12 @@ export default function HomePage() {
                   onClick={() => setSelectedFriend(f)}
                   className={`flex items-center gap-3 rounded-xl p-2 cursor-pointer transition-all ${selectedFriend?.id === f.id ? 'bg-secondary' : 'hover:bg-secondary/50'}`}
                 >
-                  <Avatar className="h-8 w-8 border border-white/10">
-                    <AvatarFallback className="bg-zinc-800 text-xs">👤</AvatarFallback>
+                  <Avatar className={`h-8 w-8 border border-white/10 ${f.color || 'bg-zinc-800'}`}>
+                    <AvatarFallback className="text-[10px] font-bold">
+                      {getInitials(getDisplayName(f))}
+                    </AvatarFallback>
                   </Avatar>
-                  <span className="text-sm font-bold">{f.alias}</span>
+                  <span className="text-sm font-bold">{getDisplayName(f)}</span>
                 </div>
               ))}
             </div>
@@ -212,9 +253,13 @@ export default function HomePage() {
                     onClick={() => setSelectedFriend(m)}
                     className={`flex items-center gap-3 rounded-xl p-2 cursor-pointer border border-orange-500/20 ${selectedFriend?.id === m.id ? 'bg-orange-500/10' : 'hover:bg-orange-500/5'}`}
                   >
-                    <Avatar className="h-8 w-8"><AvatarFallback className="bg-orange-500/20 text-orange-500 text-[10px] font-black">??</AvatarFallback></Avatar>
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className={`text-[10px] font-black ${m.color || 'bg-orange-500/20 text-orange-500'}`}>
+                        {getInitials(m.alias || m.name)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="flex flex-col">
-                      <span className="text-sm font-bold italic">{m.alias}</span>
+                      <span className="text-sm font-bold italic">{m.alias || m.name}</span>
                       <span className="text-[9px] uppercase font-black text-orange-500">Trial Active</span>
                     </div>
                   </div>
@@ -235,9 +280,13 @@ export default function HomePage() {
               <div className="p-4 border-b border-white/5 flex items-center justify-between bg-zinc-900/80">
                 <div className="flex items-center gap-3">
                   <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSelectedFriend(null)}><ArrowLeft /></Button>
-                  <Avatar><AvatarFallback className="bg-zinc-800 font-bold">??</AvatarFallback></Avatar>
+                  <Avatar className={selectedFriend.color || 'bg-zinc-800'}>
+                    <AvatarFallback className="font-bold">
+                      {getInitials(getDisplayName(selectedFriend))}
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
-                    <p className="text-sm font-black italic uppercase tracking-tight">{selectedFriend.alias}</p>
+                    <p className="text-sm font-black italic uppercase tracking-tight">{getDisplayName(selectedFriend)}</p>
                     <p className="text-[10px] text-[#D4FF3F] font-black uppercase tracking-widest">Encrypted Connection</p>
                   </div>
                 </div>
@@ -273,7 +322,7 @@ export default function HomePage() {
                     <AvatarFallback className="bg-zinc-800 text-[#D4FF3F] font-bold">{getInitials(user.firstName)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 flex gap-2">
-                    <Input 
+                    <Input
                       value={postInput}
                       onChange={(e) => setPostInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handlePostSubmit()}
@@ -319,10 +368,12 @@ export default function HomePage() {
             <Card className="p-6 border-[#D4FF3F]/20 bg-[#D4FF3F]/5 backdrop-blur-xl relative overflow-hidden">
               <div className="absolute top-0 right-0 p-2"><Sparkles className="h-4 w-4 text-[#D4FF3F] opacity-50" /></div>
               <div className="flex flex-col items-center text-center mb-6">
-                <Avatar className="h-20 w-20 mb-3 border-4 border-zinc-900 shadow-2xl">
-                  <AvatarFallback className="bg-zinc-800 text-2xl font-black italic">??</AvatarFallback>
+                <Avatar className={`h-20 w-20 mb-3 border-4 border-zinc-900 shadow-2xl ${selectedFriend.color || 'bg-zinc-800'}`}>
+                  <AvatarFallback className="text-2xl font-black italic">
+                    {getInitials(getDisplayName(selectedFriend))}
+                  </AvatarFallback>
                 </Avatar>
-                <h3 className="font-black text-xl italic uppercase tracking-tighter">{selectedFriend.alias}</h3>
+                <h3 className="font-black text-xl italic uppercase tracking-tighter">{getDisplayName(selectedFriend)}</h3>
               </div>
 
               <div className="space-y-6">
@@ -360,7 +411,7 @@ export default function HomePage() {
                 <Bot className="h-4 w-4" /> System Insight
               </h3>
               <p className="text-xs text-zinc-400 leading-relaxed font-medium">
-                Welcome, <span className="text-white">{user.firstName}</span>. Your feed is currently filtered for high-compatibility matches. 
+                Welcome, <span className="text-white">{user.firstName}</span>. Your feed is currently filtered for high-compatibility matches.
                 Use the <span className="text-[#D4FF3F]">Matches</span> page to find new people.
               </p>
             </Card>
