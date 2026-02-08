@@ -1,0 +1,12 @@
+{
+  "name": "introconnect",
+  "private": true,
+  "description": "Frontend lives in ./client — Vercel should use Root Directory: client in Project Settings if this file causes issues.",
+  "scripts": {
+    "build": "cd client && npm run build",
+    "dev": "cd client && npm run dev"
+  },
+  "dependencies": {
+    "next": "16.1.6"
+  }
+}
