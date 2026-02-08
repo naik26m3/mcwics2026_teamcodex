@@ -17,8 +17,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { BACKEND_URL, getWebSocketUrl } from "@/lib/api";
 
 export default function HomePage() {
   const router = useRouter();
@@ -50,6 +61,10 @@ export default function HomePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchResult, setSearchResult] = useState<{ id: string; firstName: string; lastName: string; name: string } | null>(null);
+
+  // --- DISCONNECT CONFIRM ---
+  const [disconnectConfirmFriend, setDisconnectConfirmFriend] = useState<{ id: string; displayName: string } | null>(null);
 
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
   const [showMatchCongrats, setShowMatchCongrats] = useState(false);
@@ -160,7 +175,7 @@ export default function HomePage() {
       // 1b. Fetch conversation partners (people who have messaged us or we've messaged)
       const innerIds = new Set((persistedInner ? JSON.parse(persistedInner) : parsedUser.inner_circle || []).map((f: any) => f.id));
       const tempIds = new Set(loadedTempFriends.map((t: any) => t.id));
-      fetch(`http://localhost:8000/chat/conversations/${userId}`)
+      fetch(`${BACKEND_URL}/chat/conversations/${userId}`)
         .then((res) => res.ok ? res.json() : { conversations: [] })
         .then((data) => {
           const partners = (data.conversations || []).map((c: any) => ({
@@ -176,7 +191,7 @@ export default function HomePage() {
         .catch(() => setConversationPartners([]));
 
       // 1c. Fetch matches list for profile lookup (bio, interests, match_score) in chat sidebar
-      fetch(`http://localhost:8000/matching/list/${userId}`)
+      fetch(`${BACKEND_URL}/matching/list/${userId}`)
         .then((res) => res.ok ? res.json() : [])
         .then((data) => setMatchesList(Array.isArray(data) ? data : []))
         .catch(() => setMatchesList([]));
@@ -193,7 +208,7 @@ export default function HomePage() {
     tempFriends.forEach((t) => t?.id && ids.add(t.id));
     if (ids.size === 0) return;
     try {
-      const res = await fetch(`http://localhost:8000/users/${userId}/resolve-display-names`, {
+      const res = await fetch(`${BACKEND_URL}/users/${userId}/resolve-display-names`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ friend_ids: Array.from(ids) }),
@@ -216,7 +231,7 @@ export default function HomePage() {
   // 2. WebSocket for real-time messages
   useEffect(() => {
     if (!user?.id) return;
-    const wsUrl = `${typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws"}://localhost:8000/chat/ws/${user.id}`;
+    const wsUrl = getWebSocketUrl(`/chat/ws/${user.id}`);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     ws.onmessage = (event) => {
@@ -263,7 +278,7 @@ export default function HomePage() {
       const fetchMessages = async () => {
         try {
           // Adjust URL if your backend port differs
-          const response = await fetch(`http://localhost:8000/chat/${user.id}/${selectedFriend.id}`);
+          const response = await fetch(`${BACKEND_URL}/chat/${user.id}/${selectedFriend.id}`);
           if (response.ok) {
             const data = await response.json();
             setMessages(data);
@@ -289,7 +304,7 @@ export default function HomePage() {
     };
 
     try {
-      const response = await fetch(`http://localhost:8000/chat/send`, {
+      const response = await fetch(`${BACKEND_URL}/chat/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(messageData)
@@ -308,35 +323,81 @@ export default function HomePage() {
     }
   };
 
-  const handleSearchAndAdd = async () => {
+  const handleSearch = async () => {
     if (!searchEmail.trim()) return;
     setIsSearching(true);
     setSearchError("");
+    setSearchResult(null);
     const userId = user?.id || localStorage.getItem("user_db_id");
     try {
-      const response = await fetch(`http://localhost:8000/users/search-and-add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, target_email: searchEmail.toLowerCase().trim() })
+      const response = await fetch(`${BACKEND_URL}/users/search-by-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: searchEmail.toLowerCase().trim(), user_id: userId }),
       });
       const data = await response.json();
       if (response.ok) {
-        const newInnerCircle = [...innerCircle, data.friend];
-        setInnerCircle(newInnerCircle);
-        const updatedUser = { ...user, inner_circle: newInnerCircle };
-        setUser(updatedUser);
-        localStorage.setItem(`inner_circle_${user.id}`, JSON.stringify(newInnerCircle));
-        localStorage.setItem("user_session", JSON.stringify(updatedUser));
-        setIsSearchOpen(false);
-        setSearchEmail("");
-        setSelectedFriend(data.friend);
+        setSearchResult({ id: data.id, firstName: data.firstName, lastName: data.lastName, name: data.name });
       } else {
-        setSearchError(data.detail || "User not found.");
+        setSearchError(data.detail || "No user found with this email.");
       }
     } catch (e) {
       setSearchError("Connection error.");
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  const asSearchResultFriend = (r: { id: string; firstName: string; lastName: string; name: string }) => ({
+    id: r.id,
+    alias: r.name,
+    name: r.name,
+  });
+
+  const handleStartChatWithSearchResult = () => {
+    if (!searchResult) return;
+    const friend = asSearchResultFriend(searchResult);
+    // Reveal their real name immediately since we searched for them
+    setDisplayNames((prev) => ({ ...prev, [friend.id]: searchResult.name }));
+    const alreadyInInner = innerCircle.some((f) => f.id === friend.id);
+    const alreadyInTemp = tempFriends.some((f) => f.id === friend.id);
+    const alreadyInPartners = conversationPartners.some((p) => p.id === friend.id);
+    if (!alreadyInPartners && !alreadyInInner && !alreadyInTemp) {
+      setConversationPartners((prev) => [...prev, { ...friend, label: "Messages" }]);
+    }
+    setSelectedFriend(friend);
+    setIsSearchOpen(false);
+    setSearchEmail("");
+    setSearchResult(null);
+    setSearchError("");
+  };
+
+  const handleAddSearchResultToInner = async () => {
+    if (!searchResult || !user) return;
+    const friend = asSearchResultFriend(searchResult);
+    try {
+      const response = await fetch(`${BACKEND_URL}/users/${user.id}/add-friend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friend }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const newInnerCircle = [...innerCircle, friend];
+        setInnerCircle(newInnerCircle);
+        setUser({ ...user, inner_circle: newInnerCircle });
+        localStorage.setItem(`inner_circle_${user.id}`, JSON.stringify(newInnerCircle));
+        localStorage.setItem("user_session", JSON.stringify({ ...user, inner_circle: newInnerCircle }));
+        setConversationPartners((prev) => prev.filter((p) => p.id !== friend.id));
+        setSelectedFriend(friend);
+        setIsSearchOpen(false);
+        setSearchEmail("");
+        setSearchResult(null);
+        setSearchError("");
+        if (data.is_match) setShowMatchCongrats(true);
+      }
+    } catch (e) {
+      console.error("Failed to add friend", e);
     }
   };
 
@@ -348,7 +409,7 @@ export default function HomePage() {
 
   const handleAddFriend = async (friend: any) => {
     try {
-      const response = await fetch(`http://localhost:8000/users/${user.id}/add-friend`, {
+      const response = await fetch(`${BACKEND_URL}/users/${user.id}/add-friend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ friend: friend })
@@ -376,24 +437,26 @@ export default function HomePage() {
   };
 
   const handleRemoveFriend = async (friendId: string) => {
-    if (!confirm("Terminate connection?")) return;
     const userId = user?.id || localStorage.getItem("user_db_id");
     try {
-      const response = await fetch(`http://localhost:8000/users/${userId}/remove-friend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ friend_id: friendId })
+      const response = await fetch(`${BACKEND_URL}/users/${userId}/remove-friend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friend_id: friendId }),
       });
       if (response.ok) {
-        const updated = innerCircle.filter(f => f.id !== friendId);
+        const updated = innerCircle.filter((f) => f.id !== friendId);
         setInnerCircle(updated);
         setUser({ ...user, inner_circle: updated });
-        const userId = user?.id || localStorage.getItem("user_db_id");
         if (userId) localStorage.setItem(`inner_circle_${userId}`, JSON.stringify(updated));
         localStorage.setItem("user_session", JSON.stringify({ ...user, inner_circle: updated }));
         if (selectedFriend?.id === friendId) setSelectedFriend(null);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDisconnectConfirmFriend(null);
+    }
   };
 
   const getDisplayName = (f: any) => displayNames[f?.id] ?? f?.alias ?? f?.name ?? "Anonymous";
@@ -445,6 +508,28 @@ export default function HomePage() {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={!!disconnectConfirmFriend} onOpenChange={(open) => !open && setDisconnectConfirmFriend(null)}>
+        <AlertDialogContent className="bg-zinc-950 border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#D4FF3F] font-black uppercase">Remove from Inner Circle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {disconnectConfirmFriend
+                ? `Remove ${disconnectConfirmFriend.displayName} from your Inner Circle? You can add them again later.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 text-black font-black hover:bg-red-600"
+              onClick={() => disconnectConfirmFriend && handleRemoveFriend(disconnectConfirmFriend.id)}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
           <Link href="/dashboard" onClick={() => setSelectedFriend(null)} className="text-2xl font-black text-[#D4FF3F] tracking-tighter uppercase italic">Quietly</Link>
@@ -458,13 +543,13 @@ export default function HomePage() {
             <Button variant="ghost" onClick={() => setSelectedFriend(null)} className={`w-full justify-start gap-3 rounded-xl font-bold uppercase text-xs tracking-widest h-11 ${!selectedFriend ? 'bg-[#D4FF3F] text-black' : 'hover:bg-secondary'}`}><Home className="h-4 w-4" /> Home</Button>
 
             {/* SEARCH BUTTON & DIALOG */}
-            <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+            <Dialog open={isSearchOpen} onOpenChange={(open) => { setIsSearchOpen(open); if (!open) { setSearchResult(null); setSearchError(""); } }}>
               <DialogTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 rounded-xl font-bold uppercase text-xs tracking-widest h-11 border border-white/10 hover:bg-secondary"><Search className="h-4 w-4" /> Search </Button>
               </DialogTrigger>
               <DialogContent className="bg-zinc-950 border-white/10 text-white">
                 <DialogHeader>
-                  <DialogTitle className="text-[#D4FF3F] font-black uppercase italic">Invite by Email</DialogTitle>
+                  <DialogTitle className="text-[#D4FF3F] font-black uppercase italic">Search by Email</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="relative">
@@ -473,18 +558,38 @@ export default function HomePage() {
                       placeholder="friend@email.com"
                       className="pl-10 bg-white/5 border-white/10 focus:border-[#D4FF3F]"
                       value={searchEmail}
-                      onChange={(e) => setSearchEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSearchAndAdd()}
+                      onChange={(e) => { setSearchEmail(e.target.value); setSearchError(""); setSearchResult(null); }}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                     />
                   </div>
                   {searchError && <p className="text-red-500 text-[10px] font-bold uppercase">{searchError}</p>}
                   <Button
-                    onClick={handleSearchAndAdd}
+                    onClick={handleSearch}
                     disabled={isSearching}
                     className="w-full bg-[#D4FF3F] text-black font-black uppercase text-xs h-11"
                   >
-                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sync Connection"}
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
                   </Button>
+                  {searchResult && (
+                    <div className="rounded-xl border border-[#D4FF3F]/20 bg-[#D4FF3F]/5 p-4 space-y-4">
+                      <p className="text-sm font-bold text-[#D4FF3F]">Found: {searchResult.name}</p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 border-[#D4FF3F]/30 text-[#D4FF3F] hover:bg-[#D4FF3F]/10"
+                          onClick={handleStartChatWithSearchResult}
+                        >
+                          Start chat
+                        </Button>
+                        <Button
+                          className="flex-1 bg-[#D4FF3F] text-black font-black hover:bg-[#D4FF3F]/90"
+                          onClick={handleAddSearchResultToInner}
+                        >
+                          Add to Inner Circle
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
@@ -638,7 +743,7 @@ export default function HomePage() {
                   </div>
                 )}
                 {innerCircle.some(f => f.id === selectedFriend.id) ? (
-                  <Button className="w-full bg-red-500 hover:bg-red-600 text-black font-black uppercase text-xs h-12 rounded-xl" onClick={() => handleRemoveFriend(selectedFriend.id)}>Disconnect</Button>
+                  <Button className="w-full bg-red-500 hover:bg-red-600 text-black font-black uppercase text-xs h-12 rounded-xl" onClick={() => setDisconnectConfirmFriend({ id: selectedFriend.id, displayName: getDisplayName(selectedFriend) })}>Disconnect</Button>
                 ) : (
                   <Button className="w-full bg-[#D4FF3F] hover:bg-[#D4FF3F]/90 text-black font-black uppercase text-xs h-12 rounded-xl" onClick={() => handleAddFriend(selectedFriend)}>Add to Inner Circle</Button>
                 )}
