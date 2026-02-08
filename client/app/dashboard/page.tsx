@@ -23,7 +23,13 @@ export default function HomePage() {
   const [tempFriends, setTempFriends] = useState<any[]>([]);
 
   useEffect(() => {
-    // Check for user login and sync session to localStorage if needed
+    // 1. Auth check (Route Guard)
+    const savedUserSession = localStorage.getItem("user_session");
+    if (!savedUserSession) {
+      router.push("/login");
+      return;
+    }
+
     const dbId = localStorage.getItem("user_db_id");
     const existingSession = localStorage.getItem("user_session");
 
@@ -63,8 +69,6 @@ export default function HomePage() {
           console.error("Failed to parse trial match data", e);
         }
       }
-    } else {
-      router.push("/login");
     }
   }, [router]);
 
@@ -107,12 +111,22 @@ export default function HomePage() {
             Quietly
           </Link>
           <div className="flex items-center gap-4">
-            <span className="hidden lg:block text-sm font-medium">Hi, {user.firstName}</span>
-            <Avatar className="h-9 w-9 border border-border">
-              <AvatarFallback className="bg-primary text-primary-foreground font-bold">
-                {getInitials(user.firstName)}
-              </AvatarFallback>
-            </Avatar>
+            <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg hover:bg-accent/50">
+              Home
+            </Link>
+            <button
+              onClick={() => {
+                localStorage.removeItem("user_session");
+                localStorage.removeItem("user_db_id");
+                router.push("/");
+              }}
+              className="text-sm font-medium text-muted-foreground hover:text-red-500 transition-colors px-3 py-2 rounded-lg hover:bg-red-500/10"
+            >
+              Sign out
+            </button>
+            <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xs font-bold">
+              {user?.firstName?.charAt(0) || 'U'}
+            </div>
           </div>
         </div>
       </nav>
