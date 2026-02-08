@@ -1,206 +1,122 @@
-# McWiCS2026_TeamcodeX
 # 🤝 IntroConnect
 ### AI-Powered Friendship Platform for Introverts
-**Hack McWiCS 2026**
+**Developed for Hack McWiCS 2026**
 
 ---
 
 ## 📌 Overview
 
-**IntroConnect** is an AI-powered friendship matching platform designed especially for introverts who want to build meaningful connections in a safe, comfortable, and pressure-free environment.
+**IntroConnect** is an AI-powered friendship matching platform designed especially for introverts who want to build meaningful connections in a safe, comfortable, and pressure-free environment. 
 
-The platform uses artificial intelligence to match users based on personality and interests while protecting privacy during early interactions.
-
-This project was developed as part of **Hack McWiCS 2026**.
+The platform uses an **AI Dynamic Interviewer** to understand your personality and connects you with "Kindred Spirits" through a privacy-first journey involving anonymous trials and mutual reveals.
 
 ---
 
-## 🎯 Problem Statement
+## 💡 Our Solution: The Introvert's Journey
 
-Introverts often face challenges in building friendships due to:
+1. **AI-Driven Discovery**  
+   Instead of a static profile, an AI interviewer chats with you to extract your true interests and personality "vibe."
 
-- Social anxiety  
-- Fear of judgment  
-- Pressure to overshare  
-- Limited safe social spaces  
+2. **Anonymous Active Trials**  
+   Connect with matches as "Anonymous Spirits." Interact without the pressure of identity, focusing purely on compatibility.
 
-Most social platforms prioritize visibility over comfort, making genuine connections harder for introverts.
+3. **Inner Circle & Reveal**  
+   Once ready, add a match to your **Inner Circle** to reveal their real identity and build a lasting connection.
 
----
-
-## 💡 Our Solution
-
-IntroConnect creates a gradual and privacy-first friendship journey through:
-
-- AI-powered personality analysis  
-- Anonymous temporary connections  
-- Mutual profile reveal system  
-- Consent-based interaction flow  
+4. **Consent-Based Control**  
+   Feeling a mismatch? Use the **Disconnect** feature to end trials or friendships at any time, protecting your mental space.
 
 ---
 
-## ⚙️ How It Works
+## 🌟 Key Features
 
-1. **Personality Assessment**  
-   Users answer AI-generated questions about their personality, interests, and preferences.
-
-2. **AI Matching**  
-   Our system processes responses and recommends compatible users.
-
-3. **Temporary Friendship Phase (48 Hours)**  
-   - Users interact anonymously  
-   - Only limited profile data is shared  
-   - No real identity is revealed  
-
-4. **Decision Phase**  
-   After 48 hours:  
-   - ✅ Both accept → Become friends, profiles revealed  
-   - ❌ One declines → Match removed  
-
----
-
-## 🌟 Features
-
-- 🤖 AI-powered compatibility matching  
-- 🔒 Privacy-first architecture  
-- 🫶 Designed for introverts  
-- ⏳ Time-limited trial friendships  
-- 📱 Responsive UI  
-- 🎨 Calming user interface  
-- 🔔 Mutual consent system  
+- 🤖 **AI Dynamic Interviewer**: Context-aware onboarding that adapts to your responses.
+- 🎯 **Vibe-Based Matching**: Proprietary matching engine filtering for >70% compatibility.
+- 🔒 **Identity Masking**: Real names and details are hidden until mutual trust is established.
+- ⚡ **Multi-Match Trials**: Say "Hi" to multiple kindred spirits at once from your discovery feed.
+- 🛡️ **Inner Circle Management**: Robust friend list management with identity reveal and disconnect functionality.
+- 🎨 **Minimalist & Calming UI**: A high-contrast, dark-mode design focused on focus and tranquility.
 
 ---
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-- HTML, CSS, JavaScript / React
+- **Framework**: [Next.js 14+ (App Router)](https://nextjs.org/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Components**: [Shadcn/UI](https://ui.shadcn.com/)
+- **Icons**: Lucide React
 
 ### Backend
-- Python (Flask / FastAPI)
-
-### AI & Matching
-- OpenAI API / Custom ML Model
-
-### Database
-- MongoDB / PostgreSQL / Firebase
-
-### Authentication
-- JWT / OAuth
-
-### Hosting
-- Vercel / Render / Railway
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+)
+- **Database**: [MongoDB](https://www.mongodb.com/) (Atlas)
+- **Engine**: Custom Python-based AI Matching & Analysis Engine
 
 ---
 
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-- Python 3.9+
-- Node.js (for frontend)
-- Git
+- Python 3.10+
+- Node.js 18+
+- MongoDB Instance (or Atlas URI)
 
-### Backend Setup (Python)
-
-1. Clone the repository:
+### 1. Backend Setup
 ```bash
-git clone https://github.com/your-username/introconnect.git
-cd introconnect/backend
-````
-
-2. Create virtual environment:
-
-```bash
+cd backend
 python -m venv venv
-source venv/bin/activate   # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
 ```
-
-4. Create `.env` file:
-
+Create a `.env` file in the `backend/` directory:
 ```env
-OPENAI_API_KEY=your_api_key
-DATABASE_URL=your_database_url
-SECRET_KEY=your_secret_key
+MONGO_URI=your_mongodb_atlas_uri
+OPENAI_API_KEY=your_key_here
+```
+Run the server:
+```bash
+python -m uvicorn main:app --port 8000 --reload
 ```
 
-5. Run backend server:
-
+### 2. Frontend Setup
 ```bash
-python app.py
-# or
-uvicorn main:app --reload
-```
-
-### Frontend Setup
-
-```bash
-cd ../frontend
+cd client
 npm install
-npm start
-```
-
-Open in browser:
-
-```
-http://localhost:3000
+npm run dev
 ```
 
 ---
 
-## 📷 Screenshots / Demo
+## 🏗️ Project Structure
 
-*(Add screenshots or demo links here)*
-
-* Landing Page
-* AI Questionnaire
-* Matching Dashboard
-* Anonymous Chat
-* Profile Reveal Screen
+```text
+McWiCS2026/
+├── backend/
+│   ├── core/           # DB & Config
+│   ├── engine/         # AI & Matching Logic
+│   ├── routes/         # API Endpoints (Auth, Users, Matches, Chat)
+│   └── main.py         # App Entry Point
+├── client/
+│   ├── app/            # Next.js Pages (Dashboard, Matches, Onboarding)
+│   ├── components/     # Reusable UI Components
+│   └── public/         # Assets
+└── README.md
+```
 
 ---
 
-## 🧑‍💻 Team
+## 🧑‍💻 Development Team
 
-* Arunraj Elanchezhian
+* **Minsik (Paul) Son** (Lead Developer)
+* **Arunraj Elanchezhian**
 * *(Add other team members here)*
 
 ---
 
 ## 🏆 Hackathon
-
-Built for:
-
-**Hack McWiCS 2026**
-McGill Women in Computer Science Hackathon
-
----
-
-## 🔮 Future Improvements
-
-* Mobile app version
-* Voice & video matching
-* AI conversation coaching
-* Group matching
-* Accessibility tools
-* Multilingual support
+Built with ❤️ for **Hack McWiCS 2026** (McGill Women in Computer Science).
 
 ---
 
 ## 📄 License
-
 MIT License
-
----
-
-## 🙏 Acknowledgements
-
-* Hack McWiCS Organizers
-* Project mentors
-* Open-source community
-* AI API providers
