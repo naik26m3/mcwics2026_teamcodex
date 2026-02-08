@@ -2,82 +2,102 @@
 
 import React, { useEffect, useState } from "react";
 import { 
-  Home, Users, UserPlus, Search, Image as ImageIcon, 
-  MoreHorizontal, MessageSquare, Heart, Share2,
-  Bot, Bell, LogOut
+  Home, Users, UserPlus, Search, Bot, Bell, LogOut, Send, ArrowLeft 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function HomePage() {
   const router = useRouter();
-  
-  // 1. STATE FOR USER DATA
   const [user, setUser] = useState<any>(null);
+  const [selectedFriend, setSelectedFriend] = useState<any>(null);
+  const [chatInput, setChatInput] = useState("");
+  const [innerCircle, setInnerCircle] = useState<any[]>([]);
+
+  // Sample data for anonymous matches (Trial Phase)
+  const [tempFriends, setTempFriends] = useState([
+    { 
+        id: "842", 
+        alias: 'User #842', 
+        time: '4h left', 
+        color: 'bg-blue-500/10 text-blue-600',
+        bio: "I'm a software dev who loves early morning hikes and coding in dark mode. I prefer deep conversations.",
+        interests: ["Rust", "Hiking", "Jazz"]
+    },
+    { 
+        id: "999", 
+        alias: 'Quiet Penguin', 
+        time: '2d left', 
+        color: 'bg-purple-500/10 text-purple-600',
+        bio: "Student at McGill. I spend most of my time in libraries. Big fan of Studio Ghibli and lo-fi beats.",
+        interests: ["Anime", "Libraries", "Tea"]
+    }
+  ]);
 
   useEffect(() => {
-    // 2. ACCESS DATA FROM DATABASE SESSION
     const savedUser = localStorage.getItem("user_session");
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      // Load existing friends from the session if available
+      if (parsedUser.inner_circle) {
+        setInnerCircle(parsedUser.inner_circle);
+      }
     } else {
-      // If no session found, kick back to login
       router.push("/login");
     }
   }, [router]);
 
+  // --- LOGOUT LOGIC ---
   const handleLogout = () => {
     localStorage.removeItem("user_session");
     router.push("/login");
   };
 
-  // Helper to get initials (e.g., "Jane Doe" -> "JD")
-  const getInitials = (name: string) => {
-    return name ? name.split(" ").map(n => n[0]).join("").toUpperCase() : "??";
+  // --- ADD FRIEND LOGIC (Connects to FastAPI) ---
+  const handleAddFriend = async (friend: any) => {
+    try {
+      const response = await fetch(`http://localhost:8000/users/${user.id}/add-friend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friend: friend })
+      });
+
+      if (response.ok) {
+        setInnerCircle((prev) => [...prev, friend]);
+        setTempFriends((prev) => prev.filter(f => f.id !== friend.id));
+        setSelectedFriend(null);
+        alert(`${friend.alias} added to your Inner Circle!`);
+      }
+    } catch (error) {
+      console.error("Failed to add friend:", error);
+    }
   };
+
+  const getInitials = (name: string) => name ? name.split(" ").map(n => n[0]).join("").toUpperCase() : "??";
 
   if (!user) return <div className="min-h-screen bg-background flex items-center justify-center">Loading Quietly...</div>;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* --- TOP NAVIGATION BAR --- */}
+      {/* --- TOP NAV --- */}
       <nav className="fixed top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+          <Link href="/home" onClick={() => setSelectedFriend(null)} className="text-2xl font-bold text-primary tracking-tighter font-space-grotesk">
+            Quietly
+          </Link>
           <div className="flex items-center gap-4">
-            <Link href="/home" className="text-2xl font-bold text-primary font-space-grotesk tracking-tighter">
-              Quietly
-            </Link>
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input 
-                placeholder="Search friends or posts..." 
-                className="h-10 w-72 rounded-full bg-secondary/50 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              />
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2 md:gap-4">
-            <Button variant="ghost" size="icon" className="rounded-full hidden sm:flex">
-              <ImageIcon className="h-5 w-5 text-muted-foreground" />
-            </Button>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-            </Button>
-            <div className="h-8 w-[1px] bg-border mx-2 hidden sm:block" />
-            
-            {/* DYNAMIC USER AVATAR */}
-            <div className="flex items-center gap-3 pl-2">
-                <span className="hidden lg:block text-sm font-medium">Hi, {user.firstName}</span>
-                <Avatar className="h-9 w-9 border border-border cursor-pointer hover:opacity-80 transition-opacity">
-                    <AvatarFallback className="bg-primary text-primary-foreground font-bold">
-                        {getInitials(user.firstName)}
-                    </AvatarFallback>
-                </Avatar>
-            </div>
+            <span className="hidden lg:block text-sm font-medium">Hi, {user.firstName}</span>
+            <Avatar className="h-9 w-9 border border-border">
+                <AvatarFallback className="bg-primary text-primary-foreground font-bold">
+                  {getInitials(user.firstName)}
+                </AvatarFallback>
+            </Avatar>
           </div>
         </div>
       </nav>
@@ -87,27 +107,54 @@ export default function HomePage() {
         {/* --- LEFT SIDEBAR --- */}
         <aside className="sticky top-24 hidden h-[calc(100vh-6rem)] w-64 flex-col gap-8 lg:flex">
           <nav className="space-y-1">
-            <Button variant="ghost" className="w-full justify-start gap-3 rounded-lg bg-accent text-accent-foreground">
+            <Button 
+                variant="ghost" 
+                onClick={() => setSelectedFriend(null)}
+                className={`w-full justify-start gap-3 rounded-lg transition-all ${
+                  !selectedFriend 
+                  ? 'bg-[#D4FF3F] text-black hover:bg-[#D4FF3F]/90' 
+                  : 'hover:bg-secondary/50'
+                }`}
+            >
               <Home className="h-5 w-5" /> Home Feed
-            </Button>
-            <Button variant="ghost" className="w-full justify-start gap-3 rounded-lg">
-              <Users className="h-5 w-5" /> Friends
             </Button>
           </nav>
 
-          {/* Temporary Friends (Trial Phase) */}
+          {/* Inner Circle (Permanent Friends) */}
+          {innerCircle.length > 0 && (
+            <section>
+              <h3 className="mb-3 px-2 text-[11px] font-bold uppercase tracking-widest text-primary">Inner Circle</h3>
+              <div className="space-y-1">
+                {innerCircle.map((f) => (
+                  <div 
+                    key={f.id} 
+                    onClick={() => setSelectedFriend(f)}
+                    className={`flex items-center gap-3 rounded-lg p-2 cursor-pointer transition-colors ${selectedFriend?.id === f.id ? 'bg-primary/10' : 'hover:bg-secondary/50'}`}
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-primary/20 text-primary text-[10px]">👤</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{f.alias}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Anonymous Matches */}
           <section>
             <div className="mb-3 flex items-center justify-between px-2">
               <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Anonymous Matches</h3>
               <span className="rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-bold text-orange-600">Trial</span>
             </div>
             <div className="space-y-1">
-              {[
-                { alias: 'User #842', time: '4h left', color: 'bg-blue-500/10 text-blue-600' },
-                { alias: 'Quiet Penguin', time: '2d left', color: 'bg-purple-500/10 text-purple-600' }
-              ].map((m) => (
-                <div key={m.alias} className="flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/50 cursor-pointer transition-colors group">
-                  <Avatar className="h-8 w-8 border-none">
+              {tempFriends.map((m) => (
+                <div 
+                  key={m.id} 
+                  onClick={() => setSelectedFriend(m)}
+                  className={`flex items-center gap-3 rounded-lg p-2 cursor-pointer transition-colors ${selectedFriend?.id === m.id ? 'bg-primary/10' : 'hover:bg-secondary/50'}`}
+                >
+                  <Avatar className="h-8 w-8">
                     <AvatarFallback className={`${m.color} text-[10px] font-bold`}>??</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col">
@@ -128,53 +175,135 @@ export default function HomePage() {
           </Button>
         </aside>
 
-        {/* --- CENTER: THE FEED --- */}
+        {/* --- CENTER: FEED OR CHAT --- */}
         <main className="flex-1 space-y-6 pb-20">
-          <Card className="p-4 border-border/50 shadow-sm">
-            <div className="flex gap-4">
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                    {getInitials(user.firstName)}
-                </AvatarFallback>
-              </Avatar>
-              <button className="flex-1 rounded-full bg-secondary/50 px-5 text-left text-sm text-muted-foreground hover:bg-secondary transition-all outline-none">
-                What's on your mind, {user.firstName}?
-              </button>
-            </div>
-          </Card>
-
-          {/* Sample Feed Post */}
-          <Card className="overflow-hidden border-border/50 shadow-sm">
-            <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback>SJ</AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-sm font-bold">Sarah Jenkins</p>
-                  <p className="text-[11px] text-muted-foreground font-medium">2 hours ago</p>
+          {selectedFriend ? (
+            /* --- CHAT VIEW --- */
+            <Card className="flex flex-col h-[calc(100vh-10rem)] border-border/50 shadow-xl overflow-hidden animate-in fade-in zoom-in-95">
+                <div className="p-4 border-b border-border flex items-center justify-between bg-card">
+                    <div className="flex items-center gap-3">
+                        <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSelectedFriend(null)}>
+                            <ArrowLeft className="h-5 w-5" />
+                        </Button>
+                        <Avatar><AvatarFallback className={selectedFriend.color}>??</AvatarFallback></Avatar>
+                        <div>
+                            <p className="text-sm font-bold italic">{selectedFriend.alias}</p>
+                            <p className="text-[10px] text-green-500 font-bold">Online</p>
+                        </div>
+                    </div>
                 </div>
-              </div>
-            </div>
-            <div className="px-4 pb-4">
-              <p className="text-sm leading-relaxed text-foreground/90">
-                Finally found a coffee shop that actually respects the "no loud music" vibe. ☕📖
-              </p>
-            </div>
-          </Card>
+
+                <ScrollArea className="flex-1 p-4 bg-secondary/5">
+                    <div className="space-y-4">
+                        <div className="flex justify-start">
+                            <div className="bg-card border border-border p-3 rounded-2xl rounded-tl-none max-w-[80%] text-sm">
+                                Hey! Based on our shared interests, the AI thought we should talk. How are you?
+                            </div>
+                        </div>
+                    </div>
+                </ScrollArea>
+
+                <div className="p-4 border-t border-border bg-card">
+                    <div className="flex gap-2">
+                        <Input 
+                            placeholder="Type a message..." 
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            className="rounded-full bg-secondary/50 border-none"
+                        />
+                        <Button size="icon" className="rounded-full bg-[#D4FF3F] text-black hover:bg-[#D4FF3F]/90">
+                            <Send className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+            </Card>
+          ) : (
+            /* --- DEFAULT FEED VIEW --- */
+            <>
+              <Card className="p-4 border-border/50 shadow-sm">
+                <div className="flex gap-4">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-primary text-primary-foreground">{getInitials(user.firstName)}</AvatarFallback>
+                  </Avatar>
+                  <button className="flex-1 rounded-full bg-secondary/50 px-5 text-left text-sm text-muted-foreground hover:bg-secondary transition-all">
+                    What's on your mind, {user.firstName}?
+                  </button>
+                </div>
+              </Card>
+
+              <Card className="overflow-hidden border-border/50 shadow-sm">
+                <div className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10"><AvatarFallback>SJ</AvatarFallback></Avatar>
+                    <div>
+                      <p className="text-sm font-bold">Sarah Jenkins</p>
+                      <p className="text-[11px] text-muted-foreground font-medium">2 hours ago</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-4 pb-4">
+                  <p className="text-sm leading-relaxed text-foreground/90">
+                    Finally found a coffee shop that actually respects the "no loud music" vibe. ☕📖
+                  </p>
+                </div>
+              </Card>
+            </>
+          )}
         </main>
 
-        {/* --- RIGHT SIDEBAR: AI DISCOVERY --- */}
+        {/* --- RIGHT SIDEBAR: BIO & ADD FRIEND --- */}
         <aside className="sticky top-24 hidden w-80 flex-col gap-6 xl:flex">
-          <Card className="p-5 border-primary/20 bg-primary/[0.03] relative overflow-hidden">
-            <h3 className="font-bold text-sm mb-2 flex items-center gap-2">
-              <Bot className="h-4 w-4 text-primary" /> Personalized for {user.firstName}
-            </h3>
-            <p className="text-xs text-muted-foreground mb-4 leading-normal">
-              Based on your interest in <span className="text-foreground font-medium italic">Quiet Spaces</span>, we recommend connecting with others in Montreal.
-            </p>
-            <Button size="sm" className="w-full rounded-full text-xs font-bold">Discover More</Button>
-          </Card>
+          {selectedFriend ? (
+            <Card className="p-6 border-primary/20 bg-primary/[0.03] animate-in slide-in-from-right-4">
+                <div className="flex flex-col items-center text-center mb-4">
+                    <Avatar className="h-20 w-20 mb-3 border-4 border-background shadow-lg">
+                        <AvatarFallback className={`${selectedFriend.color} text-2xl font-bold`}>??</AvatarFallback>
+                    </Avatar>
+                    <h3 className="font-bold text-lg italic">{selectedFriend.alias}</h3>
+                </div>
+                
+                <div className="space-y-4">
+                    <div>
+                        <h4 className="text-[11px] font-bold text-muted-foreground uppercase mb-1">About Match</h4>
+                        <p className="text-xs leading-relaxed text-foreground/80 bg-background/50 p-3 rounded-lg border">
+                            "{selectedFriend.bio}"
+                        </p>
+                    </div>
+
+                    <div>
+                        <h4 className="text-[11px] font-bold text-muted-foreground uppercase mb-2">Energy Tags</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {selectedFriend.interests.map((tag: string) => (
+                                <span key={tag} className="px-2 py-1 rounded-md bg-background border text-[10px] font-medium">#{tag}</span>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Show button ONLY if not already a friend */}
+                    {!innerCircle.some(f => f.id === selectedFriend.id) && (
+                      <div className="mt-6 pt-6 border-t border-border/50">
+                          <Button 
+                              className="w-full bg-[#D4FF3F] hover:bg-[#D4FF3F]/90 text-black font-bold gap-2 rounded-xl shadow-lg"
+                              onClick={() => handleAddFriend(selectedFriend)}
+                          >
+                              <UserPlus className="h-4 w-4" /> 
+                              Add to Inner Circle
+                          </Button>
+                      </div>
+                    )}
+                </div>
+            </Card>
+          ) : (
+            <Card className="p-5 border-primary/20 bg-primary/[0.03]">
+              <h3 className="font-bold text-sm mb-2 flex items-center gap-2">
+                <Bot className="h-4 w-4 text-primary" /> Personalized for {user.firstName}
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Based on your interest in <span className="text-foreground font-medium italic">Quiet Spaces</span>, we recommend connecting with others in Montreal.
+              </p>
+              <Button size="sm" className="w-full rounded-full text-xs font-bold">Discover More</Button>
+            </Card>
+          )}
         </aside>
 
       </div>
