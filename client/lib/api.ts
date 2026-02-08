@@ -20,20 +20,12 @@
  * IMPORTANT: Make sure your backend server is running and accessible on port 8000
  */
 
-// Get backend URL from environment variable or use localhost as fallback
+// Get backend URL from environment variable or use localhost as fallback.
+// On Vercel: set NEXT_PUBLIC_BACKEND_URL to your Railway URL (see CONNECT_VERCEL_RAILWAY.md).
 const getBackendUrl = (): string => {
-  if (typeof window !== "undefined") {
-    // Check for environment variable first (best for production/multi-device)
-    const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-    if (envUrl) return envUrl;
-    
-    // QUICK FIX: Replace 'localhost' with your server IP for multi-device testing
-    // Example: return "http://192.168.1.100:8000";
-    
-    // Default to localhost for single-device development
-    return "http://localhost:8000";
-  }
-  return "http://localhost:8000";
+  const envUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  if (envUrl) return envUrl.replace(/\/$/, ""); // no trailing slash
+  return typeof window !== "undefined" ? "http://localhost:8000" : "http://localhost:8000";
 };
 
 export const BACKEND_URL = getBackendUrl();

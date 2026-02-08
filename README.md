@@ -75,6 +75,8 @@ GEMINI_API_KEY=your_gemini_key_here
 ```
 
 **Deploying to Railway?** Set these in the Railway dashboard (Variables), not in a file. See **[RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md)**.
+
+**Frontend on Vercel and backend on Railway?** See **[CONNECT_VERCEL_RAILWAY.md](./CONNECT_VERCEL_RAILWAY.md)** so they can talk to each other.
 Run the server:
 ```bash
 python -m uvicorn main:app --port 8000 --reload

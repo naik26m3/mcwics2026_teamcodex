@@ -1,27 +1,19 @@
 import os
 import json
-import google.generativeai as genai
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Note: Using 'gemini-2.0-flash-lite' for a more stable free quota (2.5-flash had 20/day limit)
-MODEL_NAME = "gemini-3-flash-preview"
+_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL_NAME = "gemini-2.0-flash"
 
 async def generate_next_question(initial_data, chat_history):
     """
     Generates the next logical question to ask the user to deepen the profile.
     Decides whether to end the conversation based on the history.
     """
-    model = genai.GenerativeModel(
-        model_name=MODEL_NAME,
-        generation_config={
-            "response_mime_type": "application/json",
-            "temperature": 0.2 # Lower temperature for better consistency
-        }
-    )
-    
     # Calculate current turn count
     current_turn = (len(chat_history) // 2) + 1
     
@@ -56,6 +48,12 @@ async def generate_next_question(initial_data, chat_history):
       "should_end": false
     }}
     """
-    
-    response = model.generate_content(prompt)
+    response = await _client.aio.models.generate_content(
+        model=MODEL_NAME,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+        ),
+    )
     return response.text

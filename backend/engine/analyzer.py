@@ -1,25 +1,18 @@
 import os
 import json
-import google.generativeai as genai
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
 load_dotenv()
-# Get the API key stored in the .env file.
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+# New SDK: single client (uses GEMINI_API_KEY from env)
+_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 async def analyze_user_data(existing_profile, new_content):
     """
     Analyzes user conversation content and incrementally updates the profile.
     """
-    # Using gemini-3-flash-preview for maximum quota and performance
-    model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview", 
-        generation_config={
-            "response_mime_type": "application/json",
-            "temperature": 0.2
-        }
-    )
-    
     prompt = f"""
     You are an expert Psychologist and Data Analyst for an introvert matching app called "IntroConnect".
     Your goal is to understand the user's deep personality and preferences through their conversation or social posts.
@@ -52,6 +45,12 @@ async def analyze_user_data(existing_profile, new_content):
       }}
     }}
     """
-    
-    response = model.generate_content(prompt)
+    response = await _client.aio.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.2,
+        ),
+    )
     return response.text
