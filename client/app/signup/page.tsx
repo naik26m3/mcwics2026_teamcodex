@@ -42,42 +42,45 @@ export default function SignUpPage() {
   // const handleSignUp = (e: React.FormEvent) => {
   //   e.preventDefault();
   //   console.log("Ready to send to backend:", formData);
-    
+
   //   // Move to onboarding
   //   router.push("/onboarding");
   // };
 
   const handleSignUp = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  try {
-    // This 'talks' to the Python server running on your friend's machine
-    const response = await fetch("http://localhost:8000/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData), // Sends your JSON data
-    });
+    e.preventDefault();
 
-    const result = await response.json();
+    try {
+      // This 'talks' to the Python server running on your friend's machine
+      const response = await fetch("http://localhost:8000/users/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData), // Sends your JSON data
+      });
 
-    if (response.ok) {
-      console.log("Success:", result.message);
-      // Clean up the local storage draft since it's now safe in the cloud
-      localStorage.removeItem("user_signup_draft");
-      router.push("/onboarding");
-    } else {
-      alert(result.detail || "Signup failed");
+      const result = await response.json();
+
+      if (response.ok) {
+        console.log("Success:", result.message);
+        // Save the database ID so onboarding can use it for chat history
+        localStorage.setItem("user_db_id", result.db_id);
+        console.log("✅ Saved user_db_id to localStorage:", result.db_id);
+        // Clean up the local storage draft since it's now safe in the cloud
+        localStorage.removeItem("user_signup_draft");
+        router.push("/onboarding");
+      } else {
+        alert(result.detail || "Signup failed");
+      }
+    } catch (error) {
+      console.error("Connection error:", error);
+      alert("Make sure the Python backend is running!");
     }
-  } catch (error) {
-    console.error("Connection error:", error);
-    alert("Make sure the Python backend is running!");
-  }
-};
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12 animate-fade-in-up">
       <div className="w-full max-w-md space-y-6 p-8 border border-border rounded-2xl bg-card/50 backdrop-blur-sm shadow-xl">
-        
+
         <div className="text-center">
           <h1 className="text-3xl font-bold font-space-grotesk tracking-tight text-foreground">
             Create an Account
@@ -88,7 +91,7 @@ export default function SignUpPage() {
         </div>
 
         {/* Google Login Button from Commit 1 */}
-        <button 
+        <button
           type="button"
           className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-secondary text-secondary-foreground border border-border rounded-lg hover:bg-secondary/80 transition-all font-medium"
         >
@@ -126,23 +129,23 @@ export default function SignUpPage() {
         </div>
 
         <form onSubmit={handleSignUp} className="space-y-4">
-          
+
           {/* Name Row */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="firstName">First Name</label>
-              <input 
-                id="firstName" type="text"  required
+              <input
+                id="firstName" type="text" required
                 value={formData.firstName} onChange={handleChange}
-                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="lastName">Last Name</label>
-              <input 
-                id="lastName" type="text"  required
+              <input
+                id="lastName" type="text" required
                 value={formData.lastName} onChange={handleChange}
-                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -153,8 +156,8 @@ export default function SignUpPage() {
               <label className="text-sm font-medium" htmlFor="gender">
                 Gender <span className="text-xs text-muted-foreground">(Optional)</span>
               </label>
-              <select 
-                id="gender" 
+              <select
+                id="gender"
                 value={formData.gender} onChange={handleChange}
                 className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary appearance-none"
               >
@@ -169,10 +172,10 @@ export default function SignUpPage() {
               <label className="text-sm font-medium" htmlFor="age">
                 Age <span className="text-xs text-muted-foreground">(Optional)</span>
               </label>
-              <input 
-                id="age" type="number" 
+              <input
+                id="age" type="number"
                 value={formData.age} onChange={handleChange}
-                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+                className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
           </div>
@@ -180,25 +183,25 @@ export default function SignUpPage() {
           {/* Email Field */}
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="email">Email</label>
-            <input 
-              id="email" type="email"  required
+            <input
+              id="email" type="email" required
               value={formData.email} onChange={handleChange}
-              className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+              className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
           {/* Password Field */}
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="password">Password</label>
-            <input 
-              id="password" type="password"  required
+            <input
+              id="password" type="password" required
               value={formData.password} onChange={handleChange}
-              className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary" 
+              className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="w-full py-3 px-4 mt-4 bg-primary text-primary-foreground font-bold rounded-lg hover:opacity-90 transition-all shadow-lg active:scale-[0.98]"
           >
             Next

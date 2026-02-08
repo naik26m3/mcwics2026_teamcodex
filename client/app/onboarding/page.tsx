@@ -8,32 +8,32 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Bot, Check, Plus, ArrowRight } from "lucide-react";
 
 const INTEREST_TAGS = [
-  "Reading", "Gaming", "Solo Hikes", "Lo-fi Music", "Cooking", 
-  "Coding", "Painting", "Gardening", "Coffee Shops", "Movies", 
+  "Reading", "Gaming", "Solo Hikes", "Lo-fi Music", "Cooking",
+  "Coding", "Painting", "Gardening", "Coffee Shops", "Movies",
   "Yoga", "Photography", "Writing", "Puzzles", "Stargazing"
 ];
 
 const QUESTIONS = [
-  { 
-    id: "intro", 
-    question: "Hi there! I'm your AI companion. I'll help you find friends who match your energy. Ready to start?", 
-    type: "text" 
+  {
+    id: "intro",
+    question: "Hi there! I'm your AI companion. I'll help you find friends who match your energy. Ready to start?",
+    type: "text"
   },
-  { 
-    id: "interests", 
-    question: "What are some of your favorite hobbies? Pick as many as you like!", 
-    type: "tags" 
+  {
+    id: "interests",
+    question: "What are some of your favorite hobbies? Pick as many as you like!",
+    type: "tags"
   },
-  { 
-    id: "dislikes", 
-    question: "To find the right circle, tell me: what's a major social dealbreaker for you?", 
-    options: ["Crowded/Loud spaces", "Small talk", "Unplanned hangouts", "Lack of personal space"], 
-    type: "options" 
+  {
+    id: "dislikes",
+    question: "To find the right circle, tell me: what's a major social dealbreaker for you?",
+    options: ["Crowded/Loud spaces", "Small talk", "Unplanned hangouts", "Lack of personal space"],
+    type: "options"
   },
-  { 
-    id: "vibe", 
-    question: "Describe your ideal 'quiet' hangout vibe.", 
-    type: "text" 
+  {
+    id: "vibe",
+    question: "Describe your ideal 'quiet' hangout vibe.",
+    type: "text"
   },
 ];
 
@@ -43,12 +43,41 @@ export default function ChatOnboarding() {
   const [inputValue, setInputValue] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasInitialized = useRef(false);
   const router = useRouter();
 
-  // FIX: Use ref to prevent double-prompting in React Strict Mode
+  // --- DATABASE SYNC LOGIC ---
+  // --- DATABASE SYNC LOGIC ---
+  const syncMessageWithDb = async (role: "ai" | "user", text: string) => {
+    const dbId = localStorage.getItem("user_db_id");
+    
+    if (!dbId) {
+      console.warn("❌ [SYNC] No User ID found.");
+      return;
+    }
+
+    try {
+      // UPDATE THIS URL BELOW 
+      // Changed from /save-chat/ to /chat/save/
+      const response = await fetch(`http://localhost:8000/chat/save/${dbId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role,
+          text,
+          timestamp: new Date().toISOString()
+        }),
+      });
+      
+      const data = await response.json();
+      console.log("✅ [SYNC] Response:", data);
+    } catch (error) {
+      console.error("❌ [SYNC] DB Sync Error:", error);
+    }
+  };
+
   useEffect(() => {
     if (!hasInitialized.current) {
       askQuestion(0);
@@ -56,7 +85,6 @@ export default function ChatOnboarding() {
     }
   }, []);
 
-  // Auto-scroll to bottom whenever messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: "smooth" });
@@ -69,6 +97,9 @@ export default function ChatOnboarding() {
       setIsTyping(false);
       const q = QUESTIONS[stepIndex];
       setMessages((prev) => [...prev, { role: "ai", text: q.question }]);
+
+      // Save AI question to DB
+      syncMessageWithDb("ai", q.question);
     }, 1200);
   };
 
@@ -76,50 +107,49 @@ export default function ChatOnboarding() {
     const currentQuestionType = QUESTIONS[currentStep].type;
     const finalValue = overrideValue || (currentQuestionType === "tags" ? selectedTags.join(", ") : inputValue);
 
-    // Validation
     if (currentQuestionType === "tags" && selectedTags.length === 0) return;
     if (currentQuestionType === "text" && !finalValue.trim()) return;
 
-    // --- LOGIC FOR INTRO STEP ---
     if (currentStep === 0) {
       const lowerText = finalValue.toLowerCase().trim();
       const negatives = ["no", "nope", "not ready", "stop", "cancel", "nah"];
       const positives = ["yes", "yeah", "yep", "sure", "ready", "ok", "go"];
-      
+
       const isNegative = negatives.some(word => lowerText.includes(word));
       const isPositive = positives.some(word => lowerText.includes(word));
 
       setMessages((prev) => [...prev, { role: "user", text: finalValue }]);
+      syncMessageWithDb("user", finalValue); // Save user response
       setInputValue("");
 
       if (isNegative) {
         setIsTyping(true);
         setTimeout(() => {
           setIsTyping(false);
-          setMessages((prev) => [...prev, { role: "ai", text: "No problem. I'll be here if you change your mind! Redirecting..." }]);
+          const goodbye = "No problem. I'll be here if you change your mind! Redirecting...";
+          setMessages((prev) => [...prev, { role: "ai", text: goodbye }]);
+          syncMessageWithDb("ai", goodbye);
           setTimeout(() => router.push("/"), 2000);
         }, 1000);
-        return; 
+        return;
       }
 
       if (!isPositive) {
         setIsTyping(true);
         setTimeout(() => {
           setIsTyping(false);
-          setMessages((prev) => [...prev, { 
-            role: "ai", 
-            text: "I'm sorry, I didn't catch that. Are you ready to begin? (Yes/No)" 
-          }]);
+          const retry = "I'm sorry, I didn't catch that. Are you ready to begin? (Yes/No)";
+          setMessages((prev) => [...prev, { role: "ai", text: retry }]);
+          syncMessageWithDb("ai", retry);
         }, 800);
         return;
       }
     } else {
-      // Normal flow
       setMessages((prev) => [...prev, { role: "user", text: finalValue }]);
+      syncMessageWithDb("user", finalValue); // Save user response
       setInputValue("");
     }
 
-    // Move Forward
     if (currentStep < QUESTIONS.length - 1) {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
@@ -130,7 +160,7 @@ export default function ChatOnboarding() {
   };
 
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev => 
+    setSelectedTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
   };
@@ -139,17 +169,15 @@ export default function ChatOnboarding() {
     setIsTyping(true);
     setTimeout(() => {
       setIsTyping(false);
-      setMessages((prev) => [...prev, { 
-        role: "ai", 
-        text: "Got it. Knowing what to avoid is just as important as knowing what you love. Analyzing your matches now..." 
-      }]);
-      setTimeout(() => router.push("/matches"), 2500);
+      const endMsg = "Got it. Analyzing your matches now...";
+      setMessages((prev) => [...prev, { role: "ai", text: endMsg }]);
+      syncMessageWithDb("ai", endMsg);
+      // setTimeout(() => router.push("/matches"), 2500);
     }, 1500);
   };
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
-      {/* Header */}
       <header className="p-4 border-b border-border bg-card/50 backdrop-blur-md flex items-center gap-3 sticky top-0 z-10">
         <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
           <Bot className="text-primary-foreground w-6 h-6" />
@@ -160,69 +188,46 @@ export default function ChatOnboarding() {
         </div>
       </header>
 
-      {/* Chat Area */}
       <ScrollArea className="flex-1 px-4 py-6 md:px-8">
         <div className="max-w-2xl mx-auto space-y-6 pb-12">
           {messages.map((msg, i) => (
-            <div 
-              key={i} 
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
-            >
-              <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${
-                msg.role === "user" 
-                ? "bg-primary text-primary-foreground rounded-tr-none shadow-md" 
-                : "bg-card border border-border text-foreground rounded-tl-none"
-              }`}>
+            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+              <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground rounded-tr-none shadow-md" : "bg-card border border-border text-foreground rounded-tl-none"
+                }`}>
                 {msg.text}
               </div>
             </div>
           ))}
 
-          {/* Special Input: Tags */}
-          {!isTyping && QUESTIONS[currentStep].type === "tags" && messages.length > 0 && messages[messages.length-1].role === "ai" && (
+          {!isTyping && QUESTIONS[currentStep].type === "tags" && messages.length > 0 && messages[messages.length - 1].role === "ai" && (
             <div className="flex flex-wrap gap-2 p-4 bg-secondary/10 rounded-2xl border border-dashed border-border animate-in zoom-in-95">
               {INTEREST_TAGS.map((tag) => (
                 <button
                   key={tag}
                   onClick={() => toggleTag(tag)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
-                    selectedTags.includes(tag)
-                    ? "bg-primary text-primary-foreground scale-105"
-                    : "bg-background border border-border hover:border-primary/50 text-muted-foreground"
-                  }`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${selectedTags.includes(tag) ? "bg-primary text-primary-foreground scale-105" : "bg-background border border-border hover:border-primary/50 text-muted-foreground"
+                    }`}
                 >
                   {selectedTags.includes(tag) ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                   {tag}
                 </button>
               ))}
-              <Button 
-                size="sm" 
-                className="w-full mt-2 rounded-xl" 
-                onClick={() => handleSend()}
-                disabled={selectedTags.length === 0}
-              >
+              <Button size="sm" className="w-full mt-2 rounded-xl" onClick={() => handleSend()} disabled={selectedTags.length === 0}>
                 Confirm Interests <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </div>
           )}
 
-          {/* Special Input: Options */}
-          {!isTyping && QUESTIONS[currentStep].type === "options" && messages.length > 0 && messages[messages.length-1].role === "ai" && (
+          {!isTyping && QUESTIONS[currentStep].type === "options" && messages.length > 0 && messages[messages.length - 1].role === "ai" && (
             <div className="grid grid-cols-1 gap-2 animate-in slide-in-from-left-4">
               {QUESTIONS[currentStep].options?.map((opt) => (
-                <Button 
-                  key={opt} 
-                  variant="outline" 
-                  className="justify-start h-12 rounded-xl border-border hover:bg-primary/5 hover:border-primary active:scale-[0.98] transition-all"
-                  onClick={() => handleSend(opt)}
-                >
+                <Button key={opt} variant="outline" className="justify-start h-12 rounded-xl border-border hover:bg-primary/5 hover:border-primary transition-all" onClick={() => handleSend(opt)}>
                   {opt}
                 </Button>
               ))}
             </div>
           )}
 
-          {/* Typing Indicator */}
           {isTyping && (
             <div className="flex justify-start">
               <div className="bg-card border border-border px-4 py-3 rounded-2xl rounded-tl-none flex gap-1 items-center shadow-sm">
@@ -236,10 +241,9 @@ export default function ChatOnboarding() {
         </div>
       </ScrollArea>
 
-      {/* Footer / Input */}
       <footer className="p-4 md:p-6 border-t border-border bg-background/80 backdrop-blur-md">
         <div className="max-w-2xl mx-auto flex gap-3">
-          <Input 
+          <Input
             placeholder={QUESTIONS[currentStep].type === "tags" ? "Pick your favorites above..." : "Type your message..."}
             value={inputValue}
             disabled={QUESTIONS[currentStep].type === "tags" || isTyping}
@@ -247,8 +251,8 @@ export default function ChatOnboarding() {
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             className="rounded-full bg-secondary border-none h-12 px-6 focus-visible:ring-2 focus-visible:ring-primary/20 transition-all"
           />
-          <Button 
-            onClick={() => handleSend()} 
+          <Button
+            onClick={() => handleSend()}
             disabled={(QUESTIONS[currentStep].type === "tags" ? selectedTags.length === 0 : !inputValue.trim()) || isTyping}
             className="h-12 w-12 rounded-full shrink-0 shadow-lg active:scale-95 transition-transform"
           >
