@@ -89,13 +89,9 @@ npm run dev
 
 ## 🚀 Deploy to Vercel (frontend)
 
-The Next.js app lives in **`client/`**, not the repo root. So Vercel needs to use `client` as the project root:
+**The Next.js app is in `client/`, not the repo root.** You must set **Root Directory** in Vercel to `client` (this cannot be set in code; it’s a project setting).
 
-1. In [Vercel](https://vercel.com) → your project → **Settings** → **Build & Development**.
-2. Under **Root Directory**, click **Edit**, set it to **`client`**, and save.
-3. Redeploy.
-
-If you see *"No Next.js version detected"* or *"Could not identify Next.js version"*, the Root Directory is still the repo root — set it to **`client`** as above.
+**→ See [VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md) for step-by-step instructions.**
 
 ---
 
