@@ -1,11 +1,19 @@
 from fastapi import FastAPI, Body, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
+from routes import matching, auth
 import os
 
 app = FastAPI(title="IntroConnect API")
 
 # 1. CORS Configuration
+
+
+# Register Routers
+app.include_router(matching.router)
+app.include_router(auth.router)
+
+# CORS configuration for frontend integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
