@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Home, Users, UserPlus, Search, Bot, Bell, LogOut, Send,
-  ArrowLeft, Sparkles, Zap, Trash2, Mail, Loader2
+  ArrowLeft, Sparkles, Zap, Trash2, Mail, Loader2, XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,8 +17,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { BACKEND_URL, getWebSocketUrl } from "@/lib/api";
 
 export default function HomePage() {
   const router = useRouter();
@@ -29,64 +40,62 @@ export default function HomePage() {
   const [chatInput, setChatInput] = useState("");
   const [postInput, setPostInput] = useState("");
   const [posts, setPosts] = useState<any[]>([]);
-  const [messages, setMessages] = useState<any[]>([]); // Chat history state
+  const [messages, setMessages] = useState<any[]>([]);
   const [innerCircle, setInnerCircle] = useState<any[]>([]);
   const [tempFriends, setTempFriends] = useState<any[]>([]);
   const [conversationPartners, setConversationPartners] = useState<any[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const [matchesList, setMatchesList] = useState<any[]>([]);
+  const [showMatchCongrats, setShowMatchCongrats] = useState(false);
+  
+  // Search State
+  const [searchEmail, setSearchEmail] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchResult, setSearchResult] = useState<{ id: string; firstName: string; lastName: string; name: string } | null>(null);
+
+  // --- DISCONNECT CONFIRM ---
+  const [disconnectConfirmFriend, setDisconnectConfirmFriend] = useState<{ id: string; displayName: string } | null>(null);
+
   const selectedFriendRef = useRef<any>(null);
   const userRef = useRef<any>(null);
   const innerCircleRef = useRef<any[]>([]);
   const tempFriendsRef = useRef<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fetchDisplayNamesRef = useRef<() => void>(() => {});
+  const wsRef = useRef<WebSocket | null>(null);
+
   selectedFriendRef.current = selectedFriend;
   userRef.current = user;
   innerCircleRef.current = innerCircle;
   tempFriendsRef.current = tempFriends;
 
-  // --- SEARCH STATE ---
-  const [searchEmail, setSearchEmail] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-
-  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
-  const [showMatchCongrats, setShowMatchCongrats] = useState(false);
-  const [matchesList, setMatchesList] = useState<any[]>([]); // For profile lookup (bio, interests, match_score)
-
-  // 1. Auth & Initial Data Load
+  // 1. Initial Load & Auth logic
   useEffect(() => {
-    const savedUserSession = localStorage.getItem("user_session");
-    if (!savedUserSession) {
+    const savedSession = localStorage.getItem("user_session");
+    const dbId = localStorage.getItem("user_db_id");
+
+    if (!savedSession) {
       router.push("/login");
       return;
     }
-    const dbId = localStorage.getItem("user_db_id");
-    const existingSession = localStorage.getItem("user_session");
 
-    if (!existingSession && dbId) {
-      const firstName = localStorage.getItem("user_first_name") || "Explorer";
-      localStorage.setItem("user_session", JSON.stringify({ id: dbId, firstName }));
-    }
+    const parsedUser = JSON.parse(savedSession);
+    const userId = parsedUser.id || parsedUser._id || dbId;
+    setUser({ ...parsedUser, id: userId });
 
-    const savedUser = localStorage.getItem("user_session");
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      const userId = parsedUser.id || dbId;
-      setUser(parsedUser);
-
-      // Load persisted inner circle (who we already added) - survives refresh
-      const persistedInner = localStorage.getItem(`inner_circle_${userId}`);
-      if (persistedInner) {
-        try {
-          setInnerCircle(JSON.parse(persistedInner));
-        } catch (e) {
-          console.error("Failed to parse persisted inner circle", e);
-        }
-      } else if (parsedUser.inner_circle) {
-        setInnerCircle(parsedUser.inner_circle);
+    // Load Inner Circle
+    const persistedInner = localStorage.getItem(`inner_circle_${userId}`);
+    if (persistedInner) {
+      try {
+        setInnerCircle(JSON.parse(persistedInner));
+      } catch (e) { 
+        console.error("Data corruption in Inner Circle storage", e); 
       }
+    } else if (parsedUser.inner_circle) {
+      setInnerCircle(parsedUser.inner_circle);
+    }
 
       // Load persisted temp trials (active trials) - survives refresh
       const persistedTrials = localStorage.getItem(`temp_trials_${userId}`);
@@ -160,7 +169,7 @@ export default function HomePage() {
       // 1b. Fetch conversation partners (people who have messaged us or we've messaged)
       const innerIds = new Set((persistedInner ? JSON.parse(persistedInner) : parsedUser.inner_circle || []).map((f: any) => f.id));
       const tempIds = new Set(loadedTempFriends.map((t: any) => t.id));
-      fetch(`http://localhost:8000/chat/conversations/${userId}`)
+      fetch(`${BACKEND_URL}/chat/conversations/${userId}`)
         .then((res) => res.ok ? res.json() : { conversations: [] })
         .then((data) => {
           const partners = (data.conversations || []).map((c: any) => ({
@@ -176,38 +185,30 @@ export default function HomePage() {
         .catch(() => setConversationPartners([]));
 
       // 1c. Fetch matches list for profile lookup (bio, interests, match_score) in chat sidebar
-      fetch(`http://localhost:8000/matching/list/${userId}`)
+      fetch(`${BACKEND_URL}/matching/list/${userId}`)
         .then((res) => res.ok ? res.json() : [])
         .then((data) => setMatchesList(Array.isArray(data) ? data : []))
         .catch(() => setMatchesList([]));
-    }
   }, [router]);
 
-  // 1c. Resolve display names (reveal real name only when both added each other = match)
-  const fetchDisplayNames = useCallback(async (extraIds?: string[]) => {
-    const userId = user?.id || localStorage.getItem("user_db_id");
-    if (!userId) return;
-    const ids = new Set<string>(extraIds || []);
-    innerCircle.forEach((f) => f?.id && ids.add(f.id));
-    conversationPartners.forEach((p) => p?.id && ids.add(p.id));
-    tempFriends.forEach((t) => t?.id && ids.add(t.id));
+  // 2. Resolve Names
+  const fetchDisplayNames = useCallback(async () => {
+    if (!user?.id) return;
+    const ids = new Set<string>();
+    [...innerCircle, ...conversationPartners, ...tempFriends].forEach(f => f?.id && ids.add(f.id));
+    
     if (ids.size === 0) return;
     try {
-      const res = await fetch(`http://localhost:8000/users/${userId}/resolve-display-names`, {
+      const res = await fetch(`${BACKEND_URL}/users/${user.id}/resolve-display-names`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ friend_ids: Array.from(ids) }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setDisplayNames(data);
-      }
-    } catch (_) { }
+      if (res.ok) setDisplayNames(await res.json());
+    } catch (_) {}
   }, [user?.id, innerCircle, conversationPartners, tempFriends]);
 
-  useEffect(() => {
-    if (user?.id) fetchDisplayNames();
-  }, [user?.id, innerCircle, conversationPartners, tempFriends]);
+  useEffect(() => { fetchDisplayNames(); }, [innerCircle.length, tempFriends.length, fetchDisplayNames]);
 
   useEffect(() => {
     fetchDisplayNamesRef.current = fetchDisplayNames;
@@ -216,7 +217,7 @@ export default function HomePage() {
   // 2. WebSocket for real-time messages
   useEffect(() => {
     if (!user?.id) return;
-    const wsUrl = `${typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws"}://localhost:8000/chat/ws/${user.id}`;
+    const wsUrl = getWebSocketUrl(`/chat/ws/${user.id}`);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     ws.onmessage = (event) => {
@@ -262,8 +263,7 @@ export default function HomePage() {
     if (selectedFriend && user) {
       const fetchMessages = async () => {
         try {
-          // Adjust URL if your backend port differs
-          const response = await fetch(`http://localhost:8000/chat/${user.id}/${selectedFriend.id}`);
+          const response = await fetch(`${BACKEND_URL}/chat/${user.id}/${selectedFriend.id}`);
           if (response.ok) {
             const data = await response.json();
             setMessages(data);
@@ -274,11 +274,29 @@ export default function HomePage() {
       };
       fetchMessages();
     } else {
-      setMessages([]); // Clear messages when returning to feed
+      setMessages([]);
     }
   }, [selectedFriend, user]);
 
-  // 5. Handle Sending Messages
+  // 5. Handlers
+  const handlePostSubmit = () => {
+    if (!postInput.trim() || !user) return;
+    const newPost = {
+      id: Math.random().toString(36).substr(2, 9),
+      author: user.firstName || "Explorer",
+      authorId: user.id,
+      initials: (user.firstName?.[0] || "E").toUpperCase(),
+      content: postInput,
+      time: "Just now"
+    };
+    setPosts([newPost, ...posts]);
+    setPostInput("");
+  };
+
+  const handleDeletePost = (postId: string) => {
+    setPosts(prev => prev.filter(p => p.id !== postId));
+  };
+
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !selectedFriend || !user) return;
 
@@ -289,7 +307,7 @@ export default function HomePage() {
     };
 
     try {
-      const response = await fetch(`http://localhost:8000/chat/send`, {
+      const response = await fetch(`${BACKEND_URL}/chat/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(messageData)
@@ -298,7 +316,7 @@ export default function HomePage() {
       if (response.ok) {
         const savedMsg = await response.json();
         setMessages((prev) => [...prev, savedMsg]);
-        setChatInput(""); // Clear input
+        setChatInput("");
         setConversationPartners((prev) =>
           prev.map((p) => p.id === selectedFriend.id ? { ...p, label: "Messages" } : p)
         );
@@ -308,35 +326,81 @@ export default function HomePage() {
     }
   };
 
-  const handleSearchAndAdd = async () => {
+  const handleSearch = async () => {
     if (!searchEmail.trim()) return;
     setIsSearching(true);
     setSearchError("");
+    setSearchResult(null);
     const userId = user?.id || localStorage.getItem("user_db_id");
     try {
-      const response = await fetch(`http://localhost:8000/users/search-and-add`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, target_email: searchEmail.toLowerCase().trim() })
+      const response = await fetch(`${BACKEND_URL}/users/search-by-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: searchEmail.toLowerCase().trim(), user_id: userId }),
       });
       const data = await response.json();
       if (response.ok) {
-        const newInnerCircle = [...innerCircle, data.friend];
-        setInnerCircle(newInnerCircle);
-        const updatedUser = { ...user, inner_circle: newInnerCircle };
-        setUser(updatedUser);
-        localStorage.setItem(`inner_circle_${user.id}`, JSON.stringify(newInnerCircle));
-        localStorage.setItem("user_session", JSON.stringify(updatedUser));
-        setIsSearchOpen(false);
-        setSearchEmail("");
-        setSelectedFriend(data.friend);
+        setSearchResult({ id: data.id, firstName: data.firstName, lastName: data.lastName, name: data.name });
       } else {
-        setSearchError(data.detail || "User not found.");
+        setSearchError(data.detail || "No user found with this email.");
       }
     } catch (e) {
       setSearchError("Connection error.");
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  const asSearchResultFriend = (r: { id: string; firstName: string; lastName: string; name: string }) => ({
+    id: r.id,
+    alias: r.name,
+    name: r.name,
+  });
+
+  const handleStartChatWithSearchResult = () => {
+    if (!searchResult) return;
+    const friend = asSearchResultFriend(searchResult);
+    // Reveal their real name immediately since we searched for them
+    setDisplayNames((prev) => ({ ...prev, [friend.id]: searchResult.name }));
+    const alreadyInInner = innerCircle.some((f) => f.id === friend.id);
+    const alreadyInTemp = tempFriends.some((f) => f.id === friend.id);
+    const alreadyInPartners = conversationPartners.some((p) => p.id === friend.id);
+    if (!alreadyInPartners && !alreadyInInner && !alreadyInTemp) {
+      setConversationPartners((prev) => [...prev, { ...friend, label: "Messages" }]);
+    }
+    setSelectedFriend(friend);
+    setIsSearchOpen(false);
+    setSearchEmail("");
+    setSearchResult(null);
+    setSearchError("");
+  };
+
+  const handleAddSearchResultToInner = async () => {
+    if (!searchResult || !user) return;
+    const friend = asSearchResultFriend(searchResult);
+    try {
+      const response = await fetch(`${BACKEND_URL}/users/${user.id}/add-friend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friend }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const newInnerCircle = [...innerCircle, friend];
+        setInnerCircle(newInnerCircle);
+        setUser({ ...user, inner_circle: newInnerCircle });
+        localStorage.setItem(`inner_circle_${user.id}`, JSON.stringify(newInnerCircle));
+        localStorage.setItem("user_session", JSON.stringify({ ...user, inner_circle: newInnerCircle }));
+        setConversationPartners((prev) => prev.filter((p) => p.id !== friend.id));
+        setSelectedFriend(friend);
+        setIsSearchOpen(false);
+        setSearchEmail("");
+        setSearchResult(null);
+        setSearchError("");
+        if (data.is_match) setShowMatchCongrats(true);
+      }
+    } catch (e) {
+      console.error("Failed to add friend", e);
     }
   };
 
@@ -348,7 +412,7 @@ export default function HomePage() {
 
   const handleAddFriend = async (friend: any) => {
     try {
-      const response = await fetch(`http://localhost:8000/users/${user.id}/add-friend`, {
+      const response = await fetch(`${BACKEND_URL}/users/${user.id}/add-friend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ friend: friend })
@@ -361,7 +425,7 @@ export default function HomePage() {
         setTempFriends(newTempFriends);
         setConversationPartners((prev) => prev.filter((p) => p.id !== friend.id));
         setSelectedFriend(null);
-        fetchDisplayNames([friend.id]);
+        fetchDisplayNames();
         localStorage.setItem(`inner_circle_${user.id}`, JSON.stringify(newInnerCircle));
         if (newTempFriends.length > 0) {
           localStorage.setItem(`temp_trials_${user.id}`, JSON.stringify(newTempFriends));
@@ -376,50 +440,35 @@ export default function HomePage() {
   };
 
   const handleRemoveFriend = async (friendId: string) => {
-    if (!confirm("Terminate connection?")) return;
     const userId = user?.id || localStorage.getItem("user_db_id");
     try {
-      const response = await fetch(`http://localhost:8000/users/${userId}/remove-friend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ friend_id: friendId })
+      const response = await fetch(`${BACKEND_URL}/users/${userId}/remove-friend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friend_id: friendId }),
       });
       if (response.ok) {
-        const updated = innerCircle.filter(f => f.id !== friendId);
+        const updated = innerCircle.filter((f) => f.id !== friendId);
         setInnerCircle(updated);
         setUser({ ...user, inner_circle: updated });
-        const userId = user?.id || localStorage.getItem("user_db_id");
         if (userId) localStorage.setItem(`inner_circle_${userId}`, JSON.stringify(updated));
         localStorage.setItem("user_session", JSON.stringify({ ...user, inner_circle: updated }));
         if (selectedFriend?.id === friendId) setSelectedFriend(null);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDisconnectConfirmFriend(null);
+    }
   };
 
   const getDisplayName = (f: any) => displayNames[f?.id] ?? f?.alias ?? f?.name ?? "Anonymous";
-  const getInitials = (name: string) => name?.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "??";
+  const getInitials = (name: string) => name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) || "A";
 
-  // Merge selectedFriend with match profile (bio, interests, match_score) for chat sidebar
-  const getChatProfile = (f: any) => {
-    if (!f) return null;
-    const matchData = matchesList.find((m: any) => m.id === f.id);
-    // Use real bio from matches; avoid showing last message as "bio" for conversation partners
-    const bio = matchData?.bio || (f.match_score != null ? f.bio : null) || "";
-    const interests = f.interests?.length ? f.interests : (matchData?.interests || []);
-    const match_score = f.match_score ?? matchData?.match_score;
-    return {
-      ...f,
-      bio,
-      interests,
-      match_score,
-      displayName: getDisplayName(f),
-    };
-  };
-
-  if (!user) return <div className="min-h-screen bg-black flex items-center justify-center text-[#D4FF3F]">SYNCING...</div>;
+  if (!user) return <div className="min-h-screen bg-black flex items-center justify-center text-[#D4FF3F] font-black italic uppercase tracking-widest">Initialising System...</div>;
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-[#D4FF3F] selection:text-black">
       <Dialog open={showMatchCongrats} onOpenChange={setShowMatchCongrats}>
         <DialogContent className="bg-zinc-950 border-[#D4FF3F]/30 text-white max-w-md text-center">
           <div className="flex flex-col items-center gap-6 py-4">
@@ -445,26 +494,60 @@ export default function HomePage() {
         </DialogContent>
       </Dialog>
 
-      <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur-md">
+      <AlertDialog open={!!disconnectConfirmFriend} onOpenChange={(open) => !open && setDisconnectConfirmFriend(null)}>
+        <AlertDialogContent className="bg-zinc-950 border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#D4FF3F] font-black uppercase">Remove from Inner Circle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {disconnectConfirmFriend
+                ? `Remove ${disconnectConfirmFriend.displayName} from your Inner Circle? You can add them again later.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 text-black font-black hover:bg-red-600"
+              onClick={() => disconnectConfirmFriend && handleRemoveFriend(disconnectConfirmFriend.id)}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* NAVBAR */}
+      <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-black/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
           <Link href="/dashboard" onClick={() => setSelectedFriend(null)} className="text-2xl font-black text-[#D4FF3F] tracking-tighter uppercase italic">Quietly</Link>
-          <Avatar className="h-8 w-8 border border-[#D4FF3F]/50"><AvatarFallback className="bg-zinc-900 text-[#D4FF3F] text-xs">{getInitials(user.firstName)}</AvatarFallback></Avatar>
+          <div className="flex items-center gap-3">
+             <div className="text-right hidden sm:block">
+               <p className="text-[10px] font-black uppercase text-[#D4FF3F] leading-none">{user.firstName}</p>
+               <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest leading-none mt-1">Status: Active</p>
+             </div>
+             <Avatar className="h-9 w-9 border border-[#D4FF3F]/30"><AvatarFallback className="bg-zinc-950 text-[#D4FF3F] text-xs font-black">{getInitials(user.firstName || "U")}</AvatarFallback></Avatar>
+          </div>
         </div>
       </nav>
 
       <div className="mx-auto flex max-w-7xl gap-6 px-4 pt-24">
+        {/* SIDEBAR LEFT */}
         <aside className="sticky top-24 hidden h-[calc(100vh-6rem)] w-64 flex-col gap-6 lg:flex">
           <nav className="space-y-2">
-            <Button variant="ghost" onClick={() => setSelectedFriend(null)} className={`w-full justify-start gap-3 rounded-xl font-bold uppercase text-xs tracking-widest h-11 ${!selectedFriend ? 'bg-[#D4FF3F] text-black' : 'hover:bg-secondary'}`}><Home className="h-4 w-4" /> Home</Button>
+            <Button variant="ghost" onClick={() => setSelectedFriend(null)} className={`w-full justify-start gap-4 rounded-xl font-black uppercase text-[10px] tracking-widest h-12 transition-all ${!selectedFriend ? 'bg-[#D4FF3F] text-black shadow-[0_0_20px_rgba(212,255,63,0.2)]' : 'text-zinc-400 hover:bg-zinc-900'}`}>
+              <Home className="h-4 w-4" /> Home
+            </Button>
 
             {/* SEARCH BUTTON & DIALOG */}
-            <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+            <Dialog open={isSearchOpen} onOpenChange={(open) => { setIsSearchOpen(open); if (!open) { setSearchResult(null); setSearchError(""); } }}>
               <DialogTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start gap-3 rounded-xl font-bold uppercase text-xs tracking-widest h-11 border border-white/10 hover:bg-secondary"><Search className="h-4 w-4" /> Search </Button>
+                <Button variant="ghost" className="w-full justify-start gap-4 rounded-xl font-black uppercase text-[10px] tracking-widest h-12 border border-white/5 text-zinc-400 hover:bg-zinc-900">
+                  <Search className="h-4 w-4" /> Search
+                </Button>
               </DialogTrigger>
               <DialogContent className="bg-zinc-950 border-white/10 text-white">
                 <DialogHeader>
-                  <DialogTitle className="text-[#D4FF3F] font-black uppercase italic">Invite by Email</DialogTitle>
+                  <DialogTitle className="text-[#D4FF3F] font-black uppercase italic">Search by Email</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="relative">
@@ -473,107 +556,82 @@ export default function HomePage() {
                       placeholder="friend@email.com"
                       className="pl-10 bg-white/5 border-white/10 focus:border-[#D4FF3F]"
                       value={searchEmail}
-                      onChange={(e) => setSearchEmail(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSearchAndAdd()}
+                      onChange={(e) => { setSearchEmail(e.target.value); setSearchError(""); setSearchResult(null); }}
+                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                     />
                   </div>
                   {searchError && <p className="text-red-500 text-[10px] font-bold uppercase">{searchError}</p>}
                   <Button
-                    onClick={handleSearchAndAdd}
+                    onClick={handleSearch}
                     disabled={isSearching}
                     className="w-full bg-[#D4FF3F] text-black font-black uppercase text-xs h-11"
                   >
-                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sync Connection"}
+                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
                   </Button>
+                  {searchResult && (
+                    <div className="rounded-xl border border-[#D4FF3F]/20 bg-[#D4FF3F]/5 p-4 space-y-4">
+                      <p className="text-sm font-bold text-[#D4FF3F]">Found: {searchResult.name}</p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          className="flex-1 border-[#D4FF3F]/30 text-[#D4FF3F] hover:bg-[#D4FF3F]/10"
+                          onClick={handleStartChatWithSearchResult}
+                        >
+                          Start chat
+                        </Button>
+                        <Button
+                          className="flex-1 bg-[#D4FF3F] text-black font-black hover:bg-[#D4FF3F]/90"
+                          onClick={handleAddSearchResultToInner}
+                        >
+                          Add to Inner Circle
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
 
-            <Button variant="ghost" onClick={() => router.push("/onboarding?mode=discovery")} className="w-full justify-start gap-3 rounded-xl font-bold uppercase text-xs tracking-widest h-11 border border-[#D4FF3F]/20 text-[#D4FF3F] hover:bg-[#D4FF3F] hover:text-black"><UserPlus className="h-4 w-4" /> Discover</Button>
+            <Button variant="ghost" onClick={() => router.push("/onboarding?mode=discovery")} className="w-full justify-start gap-4 rounded-xl font-black uppercase text-[10px] tracking-widest h-12 border border-[#D4FF3F]/10 text-[#D4FF3F] hover:bg-[#D4FF3F] hover:text-black transition-colors">
+              <UserPlus className="h-4 w-4" /> Discover
+            </Button>
           </nav>
 
           <section className="flex-1 overflow-hidden">
-            <h3 className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Inner Circle</h3>
+            <h3 className="mb-4 px-2 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">Inner Circle</h3>
             <ScrollArea className="h-full">
-              <div className="space-y-1 pr-3">
-                {innerCircle.length === 0 && <p className="px-2 text-[10px] italic text-muted-foreground">Your circle is empty.</p>}
+              <div className="space-y-2 pr-3">
                 {innerCircle.map((f) => (
-                  <div key={f.id} onClick={() => setSelectedFriend(f)} className={`flex items-center gap-3 rounded-xl p-2 cursor-pointer transition-all ${selectedFriend?.id === f.id ? 'bg-secondary' : 'hover:bg-secondary/50'}`}>
-                    <Avatar className="h-8 w-8 border border-white/10"><AvatarFallback className="bg-zinc-800 text-[10px]">{getInitials(getDisplayName(f))}</AvatarFallback></Avatar>
-                    <span className="text-sm font-bold truncate">{getDisplayName(f)}</span>
+                  <div key={f.id} onClick={() => setSelectedFriend(f)} className={`flex items-center gap-3 rounded-xl p-3 cursor-pointer transition-all ${selectedFriend?.id === f.id ? 'bg-zinc-900 border border-white/5' : 'hover:bg-zinc-900/50'}`}>
+                    <Avatar className="h-8 w-8 border border-white/10"><AvatarFallback className="bg-zinc-800 text-[10px] font-bold">{getInitials(getDisplayName(f))}</AvatarFallback></Avatar>
+                    <span className="text-sm font-bold truncate tracking-tight">{getDisplayName(f)}</span>
                   </div>
                 ))}
               </div>
             </ScrollArea>
           </section>
 
-          {conversationPartners.length > 0 && (
-            <section>
-              <h3 className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#D4FF3F]">Messages</h3>
-              <div className="space-y-1">
-                {conversationPartners.map((p) => (
-                  <div
-                    key={p.id}
-                    onClick={() => setSelectedFriend(p)}
-                    className={`flex items-center gap-3 rounded-xl p-2 cursor-pointer border border-[#D4FF3F]/20 ${selectedFriend?.id === p.id ? 'bg-[#D4FF3F]/10' : 'hover:bg-[#D4FF3F]/5'}`}
-                  >
-                    <Avatar className="h-8 w-8"><AvatarFallback className="bg-[#D4FF3F]/20 text-[#D4FF3F] text-[10px] font-black">??</AvatarFallback></Avatar>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold truncate">{getDisplayName(p)}</span>
-                      <span className="text-[9px] uppercase font-black text-[#D4FF3F]">{p.label || "Messages"}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {tempFriends.length > 0 && (
-            <section className="animate-pulse">
-              <h3 className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">Active Trials</h3>
-              <div className="space-y-1">
-                {tempFriends.map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => setSelectedFriend(m)}
-                    className={`flex items-center gap-3 rounded-xl p-2 cursor-pointer border border-orange-500/20 ${selectedFriend?.id === m.id ? 'bg-orange-500/10' : 'hover:bg-orange-500/5'}`}
-                  >
-                    <Avatar className="h-8 w-8"><AvatarFallback className="bg-orange-500/20 text-orange-500 text-[10px] font-black">??</AvatarFallback></Avatar>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold italic">{m.alias}</span>
-                      <span className="text-[9px] uppercase font-black text-orange-500">Trial Active</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <Button onClick={handleLogout} variant="ghost" className="mt-auto w-full justify-start gap-3 text-muted-foreground hover:text-red-500 text-xs font-bold uppercase h-11 rounded-xl"><LogOut className="h-4 w-4" /> Logoff</Button>
+          <Button onClick={() => { localStorage.clear(); router.push("/login"); }} variant="ghost" className="mt-auto w-full justify-start gap-3 text-zinc-500 hover:text-red-500 text-[10px] font-black uppercase h-12 rounded-xl">
+            <LogOut className="h-4 w-4" /> Logoff
+          </Button>
         </aside>
 
+        {/* CENTER FEED */}
         <main className="flex-1 space-y-6 pb-20">
           {selectedFriend ? (
-            <Card className="flex flex-col h-[calc(100vh-12rem)] border-white/5 bg-zinc-900/40 backdrop-blur-xl">
-              <div className="p-4 border-b border-white/5 flex items-center justify-between">
+            <Card className="flex flex-col h-[calc(100vh-12rem)] border-white/5 bg-zinc-950 rounded-[2rem] overflow-hidden">
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-900/20">
                 <div className="flex items-center gap-3">
                   <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSelectedFriend(null)}><ArrowLeft /></Button>
-                  <p className="text-sm font-black italic uppercase">{getDisplayName(selectedFriend)}</p>
+                  <p className="text-sm font-black italic uppercase tracking-widest text-[#D4FF3F]">{getDisplayName(selectedFriend)}</p>
                 </div>
               </div>
+              
               <ScrollArea className="flex-1 p-6">
                 <div className="space-y-4">
-                  {messages.length === 0 && (
-                    <div className="flex justify-center mb-8">
-                      <span className="text-[10px] uppercase font-black tracking-[0.3em] text-muted-foreground bg-white/5 px-4 py-1 rounded-full">Conversation Started</span>
-                    </div>
-                  )}
                   {messages.map((msg, idx) => (
                     <div key={idx} className={`flex ${msg.senderId === user.id ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[75%] p-3 rounded-2xl text-sm ${msg.senderId === user.id
-                          ? 'bg-[#D4FF3F] text-black rounded-tr-none font-bold'
-                          : 'bg-zinc-800 text-white rounded-tl-none border border-white/5'
-                        }`}>
+                      <div className={`max-w-[75%] p-4 rounded-2xl text-sm ${msg.senderId === user.id ? 'bg-[#D4FF3F] text-black font-bold' : 'bg-zinc-900 text-white border border-white/5'}`}>
                         {msg.content}
                       </div>
                     </div>
@@ -581,70 +639,105 @@ export default function HomePage() {
                   <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
-
-              <div className="p-4 bg-zinc-900/80 border-t border-white/5">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Send message..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                    className="rounded-xl bg-white/5 border-white/10 focus:border-[#D4FF3F]/50"
-                  />
-                  <Button
-                    onClick={handleSendMessage}
-                    size="icon"
-                    className="rounded-xl bg-[#D4FF3F] text-black hover:bg-[#D4FF3F]/90"
-                  >
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
+              
+              <div className="p-4 bg-zinc-900/30 border-t border-white/5 flex gap-2">
+                <Input placeholder="Transmit message..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} className="bg-white/5 border-white/10 focus:border-[#D4FF3F]/50 h-12 rounded-xl" />
+                <Button onClick={handleSendMessage} size="icon" className="h-12 w-12 bg-[#D4FF3F] text-black hover:scale-95 transition-transform"><Send className="h-5 w-5" /></Button>
               </div>
             </Card>
           ) : (
-            <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-xs uppercase font-black tracking-widest italic">Broadcast range: Global | Selection required.</div>
+            <div className="space-y-6">
+              <div className="flex items-center justify-center p-12 text-zinc-600">
+                <p className="text-[10px] font-black uppercase tracking-[0.5em] italic">What's on your mind</p>
+              </div>
+
+              <Card className="p-4 border-white/5 bg-zinc-900/40 backdrop-blur-md rounded-2xl">
+                <div className="flex gap-4">
+                  <Input value={postInput} onChange={(e) => setPostInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handlePostSubmit()} placeholder="Broadcast a thought to the network..." className="bg-white/5 border-white/5 focus:border-[#D4FF3F]/30" />
+                  <Button onClick={handlePostSubmit} disabled={!postInput.trim()} className="bg-[#D4FF3F] text-black font-black uppercase text-xs px-8 rounded-xl">Post</Button>
+                </div>
+              </Card>
+
+              <div className="space-y-4">
+                {posts.map((post) => (
+                  <Card key={post.id} className="p-6 border-white/5 bg-zinc-900/20 hover:bg-zinc-900/30 transition-all rounded-3xl group relative">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-7 w-7 border border-[#D4FF3F]/20"><AvatarFallback className="text-[10px] bg-black text-[#D4FF3F] font-black">{post.initials}</AvatarFallback></Avatar>
+                        <p className="text-[10px] font-black uppercase tracking-widest">{post.author} <span className="text-zinc-600 mx-2">•</span> {post.time}</p>
+                      </div>
+                      {post.authorId === user.id && (
+                        <Button variant="ghost" size="icon" onClick={() => handleDeletePost(post.id)} className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-zinc-500 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                      )}
+                    </div>
+                    <p className="text-sm text-zinc-300 leading-relaxed font-medium">{post.content}</p>
+                  </Card>
+                ))}
+              </div>
+            </div>
           )}
         </main>
 
+        {/* SIDEBAR RIGHT */}
         <aside className="sticky top-24 hidden w-80 flex-col gap-6 xl:flex">
-          {selectedFriend && (() => {
-            const profile = getChatProfile(selectedFriend);
-            if (!profile) return null;
-            return (
-              <Card className="p-6 rounded-3xl border-[#D4FF3F]/20 bg-[#D4FF3F]/5 backdrop-blur-xl">
-                <div className="flex justify-between items-start mb-4">
-                  <Avatar className="h-12 w-12 rounded-full border border-[#D4FF3F]/30">
-                    <AvatarFallback className="bg-zinc-800 text-[#D4FF3F] text-sm font-black">
-                      {getInitials(profile.displayName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  {profile.match_score != null && (
-                    <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 bg-green-500/20 text-[#D4FF3F] rounded-full">
-                      {profile.match_score}% Match
-                    </span>
-                  )}
+          {selectedFriend ? (
+            <Card className="p-8 rounded-[2.5rem] border-white/5 bg-zinc-950 shadow-2xl animate-in slide-in-from-right-4 duration-500">
+              <div className="flex flex-col items-center text-center">
+                <Avatar className="h-24 w-24 mb-6 border-2 border-[#D4FF3F]/20 p-1 bg-black">
+                  <AvatarFallback className="text-3xl font-black bg-zinc-900 text-[#D4FF3F] w-full h-full rounded-full flex items-center justify-center">
+                    {getInitials(getDisplayName(selectedFriend))}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-2">{getDisplayName(selectedFriend)}</h3>
+                <p className="text-xs text-zinc-500 mb-8 italic leading-relaxed">"{selectedFriend.bio || "No profile bio decrypted."}"</p>
+                
+                <div className="flex flex-wrap justify-center gap-2 mb-10">
+                  {(selectedFriend.interests || []).map((i: string) => (
+                    <span key={i} className="text-[9px] font-black uppercase bg-zinc-900 text-zinc-400 border border-white/5 px-3 py-1.5 rounded-full">#{i}</span>
+                  ))}
                 </div>
-                <h3 className="text-xl font-bold mb-1 italic tracking-tight">{profile.displayName}</h3>
-                {profile.bio && (
-                  <p className="text-xs text-muted-foreground mb-4 leading-relaxed line-clamp-3">"{profile.bio}"</p>
-                )}
-                {profile.interests?.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-6">
-                    {profile.interests.slice(0, 6).map((interest: string) => (
-                      <span key={interest} className="text-[9px] font-bold uppercase tracking-tighter bg-secondary/50 px-2 py-0.5 rounded">
-                        #{interest}
-                      </span>
-                    ))}
-                  </div>
-                )}
+
                 {innerCircle.some(f => f.id === selectedFriend.id) ? (
-                  <Button className="w-full bg-red-500 hover:bg-red-600 text-black font-black uppercase text-xs h-12 rounded-xl" onClick={() => handleRemoveFriend(selectedFriend.id)}>Disconnect</Button>
+                  <Button 
+                    onClick={() => setDisconnectConfirmFriend({ id: selectedFriend.id, displayName: getDisplayName(selectedFriend) })}
+                    className="w-full bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500 hover:text-white font-black uppercase text-[10px] tracking-widest h-14 rounded-2xl transition-all"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" /> Disconnect
+                  </Button>
                 ) : (
-                  <Button className="w-full bg-[#D4FF3F] hover:bg-[#D4FF3F]/90 text-black font-black uppercase text-xs h-12 rounded-xl" onClick={() => handleAddFriend(selectedFriend)}>Add to Inner Circle</Button>
+                  <Button className="w-full bg-[#D4FF3F] text-black font-black uppercase text-[10px] tracking-widest h-14 rounded-2xl cursor-default">
+                    Discovery Profile
+                  </Button>
                 )}
+              </div>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              <Card className="p-6 border-white/5 bg-zinc-900/40 rounded-3xl">
+                <h3 className="font-black text-[10px] uppercase text-[#D4FF3F] mb-4 flex items-center gap-2"><Bot className="h-4 w-4" /> System Insight</h3>
+                <p className="text-xs text-zinc-400 italic">"Detected {matchesList.length} resonance patterns. Your signal is clear."</p>
               </Card>
-            );
-          })()}
+              
+              <section>
+                <h3 className="mb-4 px-2 text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500 flex items-center justify-between">
+                  Suggested Matches <Sparkles className="h-3 w-3 text-[#D4FF3F]" />
+                </h3>
+                <div className="space-y-3">
+                  {matchesList.slice(0, 3).map((match: any) => (
+                    <Card key={match.id} onClick={() => setSelectedFriend(match)} className="p-4 border-white/5 bg-zinc-900/20 hover:bg-[#D4FF3F]/5 transition-all cursor-pointer group rounded-2xl">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="h-1.5 w-1.5 rounded-full bg-[#D4FF3F] shadow-[0_0_8px_#D4FF3F]" />
+                        <span className="text-[11px] font-black uppercase italic group-hover:text-[#D4FF3F]">{match.name || "Anonymous"}</span>
+                        <span className="ml-auto text-[10px] font-black text-[#D4FF3F]">{match.match_score}%</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 line-clamp-2 italic leading-snug">{match.bio || "Analysing signal..."}</p>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
         </aside>
       </div>
     </div>
